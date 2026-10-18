@@ -1,0 +1,18 @@
+[package]
+name = "opendembow"
+version = "0.3.0"
+edition = "2021"
+description = "OpenDembow - a modern, elegant digital audio workstation written in Rust."
+license = "GPL-3.0-or-later"
+authors = ["Jorge Andre Castro <georgeandrec@gmail.com>"]
+
+[dependencies]
+eframe = "0.29"
+cpal = "0.15"
+hound = "3.5"
+rfd = "0.15"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

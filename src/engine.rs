@@ -1,0 +1,276 @@
+//! Real-time mixer, audio output and offline bounce.
+
+use crate::instruments::{Instrument, Voice};
+use crate::project::*;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::{Arc, Mutex};
+
+fn soft(x: f32) -> f32 {
+    let a = x.abs();
+    if a < 0.8 {
+        x
+    } else {
+        x.signum() * (0.8 + 0.2 * ((a - 0.8) / 0.2).tanh())
+    }
+}
+
+fn gains(t: &Track, any_solo: bool) -> (f32, f32) {
+    if t.mute || (any_solo && !t.solo) {
+        return (0.0, 0.0);
+    }
+    let ang = (t.pan.clamp(-1.0, 1.0) + 1.0) * 0.25 * std::f32::consts::PI;
+    (t.volume * ang.cos() * std::f32::consts::SQRT_2, t.volume * ang.sin() * std::f32::consts::SQRT_2)
+}
+
+pub struct Mixer {
+    pub voices: Vec<Voice>,
+    pub meters: Vec<f32>,
+    pub master: f32,
+    l: Vec<f32>,
+    r: Vec<f32>,
+    peaks: Vec<f32>,
+}
+
+impl Mixer {
+    pub fn new() -> Self {
+        Mixer { voices: Vec::new(), meters: Vec::new(), master: 0.0, l: Vec::new(), r: Vec::new(), peaks: Vec::new() }
+    }
+
+    /// Renders `n` frames starting at sample `pos` into the internal L/R buffers.
+    pub fn render(&mut self, p: &Project, pos: usize, playing: bool, n: usize) {
+        let Mixer { voices, meters, master, l, r, peaks } = self;
+        l.clear();
+        l.resize(n, 0.0);
+        r.clear();
+        r.resize(n, 0.0);
+        let count = p.tracks.len();
+        peaks.clear();
+        peaks.resize(count, 0.0);
+        if meters.len() != count {
+            *meters = vec![0.0; count];
+        }
+        let any_solo = p.tracks.iter().any(|t| t.solo);
+        let spb = 60.0 / p.bpm * p.sr as f64;
+        let dt = 1.0 / p.sr;
+
+        if playing {
+            for (ti, t) in p.tracks.iter().enumerate() {
+                let (gl, gr) = gains(t, any_solo);
+                if gl == 0.0 && gr == 0.0 {
+                    continue;
+                }
+                for c in &t.clips {
+                    match &c.kind {
+                        ClipKind::Midi(notes) => {
+                            if let TrackKind::Instrument(inst) = t.kind {
+                                for nn in notes {
+                                    if nn.start >= c.len {
+                                        continue;
+                                    }
+                                    let s = ((c.start + nn.start) * spb) as usize;
+                                    if s >= pos && s < pos + n {
+                                        let hold = ((nn.len * spb) as usize).max(1);
+                                        voices.push(Voice::new(ti, inst, nn.key, nn.vel, s - pos, hold));
+                                    }
+                                }
+                            }
+                        }
+                        ClipKind::Audio(data) => {
+                            let start = (c.start * spb) as usize;
+                            if pos + n > start && pos < start + data.len() {
+                                for i in 0..n {
+                                    let a = pos + i;
+                                    if a >= start && a - start < data.len() {
+                                        let s = data[a - start];
+                                        l[i] += s * gl;
+                                        r[i] += s * gr;
+                                        peaks[ti] = peaks[ti].max((s * gl).abs().max((s * gr).abs()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        voices.retain_mut(|v| {
+            let Some(t) = p.tracks.get(v.track) else { return false };
+            let (gl, gr) = gains(t, any_solo);
+            for i in 0..n {
+                if v.delay > 0 {
+                    v.delay -= 1;
+                    continue;
+                }
+                if v.hold != usize::MAX {
+                    if v.hold == 0 {
+                        v.release();
+                    } else {
+                        v.hold -= 1;
+                    }
+                }
+                match v.next(dt) {
+                    Some(x) => {
+                        l[i] += x * gl;
+                        r[i] += x * gr;
+                        let y = (x * gl).abs().max((x * gr).abs());
+                        peaks[v.track] = peaks[v.track].max(y);
+                    }
+                    None => return false,
+                }
+            }
+            true
+        });
+
+        for (m, pk) in meters.iter_mut().zip(peaks.iter()) {
+            *m = (*m * 0.88).max(*pk);
+        }
+        let mut mp = 0.0f32;
+        for i in 0..n {
+            mp = mp.max(l[i].abs()).max(r[i].abs());
+        }
+        *master = (*master * 0.88).max(mp);
+    }
+}
+
+/// Bounces the whole project to interleaved stereo.
+pub fn render_offline(p: &Project) -> Vec<f32> {
+    let mut m = Mixer::new();
+    let end = (p.end_beats() * 60.0 / p.bpm * p.sr as f64) as usize + (p.sr * 3.0) as usize;
+    let mut out = Vec::with_capacity(end * 2);
+    let mut pos = 0;
+    while pos < end {
+        let n = 512.min(end - pos);
+        m.render(p, pos, true, n);
+        for i in 0..n {
+            out.push(soft(m.l[i]));
+            out.push(soft(m.r[i]));
+        }
+        pos += n;
+    }
+    out
+}
+
+pub struct Shared {
+    pub project: Arc<Project>,
+    pub pos: usize,
+    pub playing: bool,
+    pub mixer: Mixer,
+}
+
+pub struct Engine {
+    shared: Arc<Mutex<Shared>>,
+    pub error: Option<String>,
+    _stream: Option<cpal::Stream>,
+}
+
+pub fn device_sr() -> f32 {
+    cpal::default_host()
+        .default_output_device()
+        .and_then(|d| d.default_output_config().ok())
+        .map(|c| c.sample_rate().0 as f32)
+        .unwrap_or(44100.0)
+}
+
+impl Engine {
+    pub fn new(project: Project) -> Self {
+        let shared = Arc::new(Mutex::new(Shared {
+            project: Arc::new(project),
+            pos: 0,
+            playing: false,
+            mixer: Mixer::new(),
+        }));
+        match Self::open(shared.clone()) {
+            Ok(s) => Engine { shared, error: None, _stream: Some(s) },
+            Err(e) => Engine { shared, error: Some(e), _stream: None },
+        }
+    }
+
+    fn open(shared: Arc<Mutex<Shared>>) -> Result<cpal::Stream, String> {
+        let dev = cpal::default_host()
+            .default_output_device()
+            .ok_or_else(|| "No audio output device found".to_string())?;
+        let cfg = dev.default_output_config().map_err(|e| e.to_string())?;
+        if cfg.sample_format() != cpal::SampleFormat::F32 {
+            return Err("Unsupported audio format (f32 required)".into());
+        }
+        let channels = cfg.channels() as usize;
+        let stream = dev
+            .build_output_stream(
+                &cfg.into(),
+                move |data: &mut [f32], _| {
+                    let mut g = shared.lock().unwrap();
+                    let s = &mut *g;
+                    let n = data.len() / channels;
+                    let proj = s.project.clone();
+                    s.mixer.render(&proj, s.pos, s.playing, n);
+                    if s.playing {
+                        s.pos += n;
+                    }
+                    for (i, frame) in data.chunks_mut(channels).enumerate() {
+                        let (l, r) = (soft(s.mixer.l[i]), soft(s.mixer.r[i]));
+                        if channels == 1 {
+                            frame[0] = (l + r) * 0.5;
+                        } else {
+                            frame[0] = l;
+                            frame[1] = r;
+                            for x in frame.iter_mut().skip(2) {
+                                *x = 0.0;
+                            }
+                        }
+                    }
+                },
+                |e| eprintln!("audio error: {e}"),
+                None,
+            )
+            .map_err(|e| e.to_string())?;
+        stream.play().map_err(|e| e.to_string())?;
+        Ok(stream)
+    }
+
+    pub fn set_project(&self, p: &Project) {
+        self.shared.lock().unwrap().project = Arc::new(p.clone());
+    }
+
+    pub fn toggle_play(&self) {
+        let mut g = self.shared.lock().unwrap();
+        g.playing = !g.playing;
+        if !g.playing {
+            for v in g.mixer.voices.iter_mut().filter(|v| !v.live) {
+                v.release();
+            }
+        }
+    }
+
+    pub fn set_pos(&self, beats: f64, bpm: f64, sr: f32) {
+        let mut g = self.shared.lock().unwrap();
+        g.pos = (beats.max(0.0) * 60.0 / bpm * sr as f64) as usize;
+        for v in g.mixer.voices.iter_mut().filter(|v| !v.live) {
+            v.release();
+        }
+    }
+
+    pub fn note_on(&self, track: usize, inst: Instrument, key: u8) {
+        self.shared.lock().unwrap().mixer.voices.push(Voice::live(track, inst, key, 0.85));
+    }
+
+    pub fn note_off(&self, key: u8) {
+        for v in self.shared.lock().unwrap().mixer.voices.iter_mut() {
+            if v.live && v.key == key && !v.released() {
+                v.release();
+            }
+        }
+    }
+
+    /// Short preview of a note (used when editing in the piano roll).
+    pub fn audition(&self, track: usize, inst: Instrument, key: u8, sr: f32) {
+        let hold = (0.25 * sr) as usize;
+        self.shared.lock().unwrap().mixer.voices.push(Voice::new(track, inst, key, 0.8, 0, hold));
+    }
+
+    /// (position in samples, playing, per-track meters, master meter)
+    pub fn status(&self) -> (usize, bool, Vec<f32>, f32) {
+        let g = self.shared.lock().unwrap();
+        (g.pos, g.playing, g.mixer.meters.clone(), g.mixer.master)
+    }
+}
