@@ -1,4 +1,4 @@
-//! OpenDembow 0.3 - a modern, elegant DAW.
+//! OpenDembow 0.4 - a modern, elegant DAW.
 
 mod arrangement;
 mod audio_io;
@@ -12,7 +12,7 @@ mod project;
 mod project_io;
 mod theme;
 
-use eframe::egui::{self, vec2, Align2, Color32, FontId, Key, Rect};
+use eframe::egui::{self, Color32, Key, Rect};
 use engine::Engine;
 use instruments::Instrument;
 use project::*;
@@ -391,7 +391,7 @@ impl eframe::App for App {
             .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 14.0, right: 14.0, top: 6.0, bottom: 8.0 }))
             .show(ctx, |ui| self.ui_keyboard(ui));
         egui::SidePanel::left("browser")
-            .exact_width(220.0)
+            .exact_width(300.0)
             .resizable(false)
             .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 14.0)))
             .show(ctx, |ui| self.ui_browser(ui));
@@ -407,13 +407,7 @@ impl eframe::App for App {
         // dragging an instrument from the browser: ghost + drop
         if let Some(inst) = self.drag_inst {
             ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
-            if let Some(p) = ctx.pointer_latest_pos() {
-                let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("ghost")));
-                let r = Rect::from_min_size(p + vec2(14.0, 10.0), vec2(160.0, 34.0));
-                painter.rect_filled(r, 10.0, Color32::WHITE);
-                painter.rect_stroke(r, 10.0, stroke(1.5, ACCENT));
-                painter.text(r.center(), Align2::CENTER_CENTER, inst.name(), FontId::proportional(13.5), INK);
-            }
+            chrome::draw_ghost(ctx, inst);
             if ctx.input(|i| i.pointer.any_released()) {
                 if let Some(p) = ctx.pointer_latest_pos() {
                     self.drop_instrument(inst, p);

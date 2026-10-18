@@ -1,9 +1,116 @@
 //! Application chrome: icon, menu bar, transport bar, instrument browser, help window.
 
-use crate::instruments::Instrument;
+use crate::instruments::{Category, Instrument};
+use crate::project::TrackKind;
 use crate::theme::*;
 use crate::App;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, RichText, Rounding, Sense};
+use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, Rounding, Sense, Shape};
+use std::f32::consts::TAU;
+
+/// State of the instrument browser (kept in egui's memory, no change needed in `App`).
+#[derive(Clone, Default)]
+struct BrowserState {
+    cat: Option<Category>,
+    query: String,
+    /// Scroll offset forced for the next frame (auto-scroll while dragging).
+    force: Option<f32>,
+}
+
+fn short_name(c: Category) -> &'static str {
+    match c {
+        Category::Keys => "Keys",
+        Category::Organs => "Organs",
+        Category::Leads => "Leads",
+        Category::Basses => "Basses",
+        Category::Plucked => "Plucked",
+        Category::Pads => "Pads",
+        Category::Mallets => "Mallets",
+        Category::Brass => "Brass",
+    }
+}
+
+/// Tiny hand-drawn icon for each category.
+fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
+    let c = r.center();
+    let w = r.width() * 0.56;
+    let h = r.height() * 0.46;
+    let st = stroke(1.8, col);
+    let wave = |f: fn(f32) -> f32| -> Vec<Pos2> {
+        (0..=24)
+            .map(|i| {
+                let x = i as f32 / 24.0;
+                pos2(c.x - w / 2.0 + x * w, c.y - f(x) * h / 2.0)
+            })
+            .collect()
+    };
+    match cat {
+        Category::Keys => {
+            for k in 0..3 {
+                let x = c.x - w / 2.0 + k as f32 * (w / 3.0);
+                p.rect_filled(Rect::from_min_size(pos2(x + 0.8, c.y - h / 2.0), vec2(w / 3.0 - 1.6, h)), 1.5, col);
+            }
+        }
+        Category::Organs => {
+            let hs = [0.55f32, 0.85, 1.0, 0.7];
+            for (k, hh) in hs.iter().enumerate() {
+                let x = c.x - w / 2.0 + k as f32 * (w / 4.0);
+                let ph = h * hh;
+                p.rect_filled(Rect::from_min_size(pos2(x + 0.8, c.y + h / 2.0 - ph), vec2(w / 4.0 - 1.6, ph)), 1.5, col);
+            }
+        }
+        Category::Leads => {
+            p.add(Shape::line(wave(|x| (x * 2.0).fract() * 2.0 - 1.0), st));
+        }
+        Category::Basses => {
+            p.add(Shape::line(wave(|x| (x * TAU).sin()), st));
+        }
+        Category::Plucked => {
+            p.add(Shape::line(wave(|x| (x * TAU * 3.0).sin() * (1.0 - x)), st));
+        }
+        Category::Pads => {
+            p.add(Shape::line(wave(|x| (x * TAU * 1.5).sin()), st));
+            p.add(Shape::line(wave(|x| (x * TAU * 1.5 + 1.2).sin()), stroke(1.8, col.gamma_multiply(0.45))));
+        }
+        Category::Mallets => {
+            p.circle_stroke(c, h * 0.5, st);
+            p.circle_filled(c, 2.2, col);
+        }
+        Category::Brass => {
+            let pts = vec![
+                pos2(c.x - w / 2.0, c.y - h * 0.14),
+                pos2(c.x, c.y - h * 0.14),
+                pos2(c.x + w / 2.0, c.y - h / 2.0),
+                pos2(c.x + w / 2.0, c.y + h / 2.0),
+                pos2(c.x, c.y + h * 0.14),
+                pos2(c.x - w / 2.0, c.y + h * 0.14),
+            ];
+            p.add(Shape::closed_line(pts, st));
+        }
+    }
+}
+
+/// Rounded tinted tile with the category glyph.
+fn draw_tile(p: &Painter, rect: Rect, inst: Instrument) {
+    let cat = inst.category();
+    let col = PALETTE[cat as usize % 8];
+    p.rect_filled(rect, 10.0, tint(col, 40));
+    draw_glyph(p, rect, cat, col);
+}
+
+/// Floating card that follows the cursor while an instrument is dragged.
+pub fn draw_ghost(ctx: &egui::Context, inst: Instrument) {
+    if let Some(p) = ctx.pointer_latest_pos() {
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("ghost")));
+        let r = Rect::from_min_size(p + vec2(16.0, 12.0), vec2(200.0, 48.0));
+        painter.rect_filled(r.translate(vec2(0.0, 4.0)).expand(2.0), 16.0, Color32::from_black_alpha(30));
+        painter.rect_filled(r, 14.0, Color32::WHITE);
+        painter.rect_stroke(r, 14.0, stroke(1.5, ACCENT));
+        let tile = Rect::from_min_size(pos2(r.left() + 7.0, r.center().y - 17.0), vec2(34.0, 34.0));
+        draw_tile(&painter, tile, inst);
+        painter.text(pos2(tile.right() + 10.0, r.center().y - 7.0), Align2::LEFT_CENTER, inst.name(), FontId::proportional(13.5), INK);
+        painter.text(pos2(tile.right() + 10.0, r.center().y + 9.0), Align2::LEFT_CENTER, inst.category().name(), FontId::proportional(11.0), GREY);
+    }
+}
 
 /// Procedural app icon: a blue rounded square with a tiny piano keyboard.
 pub fn app_icon() -> egui::IconData {
@@ -104,11 +211,15 @@ impl App {
             });
             ui.menu_button("Track", |ui| {
                 ui.menu_button("Add Instrument", |ui| {
-                    for inst in Instrument::ALL {
-                        if ui.button(inst.name()).clicked() {
-                            self.add_track(inst);
-                            ui.close_menu();
-                        }
+                    for c in Category::ALL {
+                        ui.menu_button(c.name(), |ui| {
+                            for inst in Instrument::ALL.iter().copied().filter(|i| i.category() == c) {
+                                if ui.button(inst.name()).clicked() {
+                                    self.add_track(inst);
+                                    ui.close_menu();
+                                }
+                            }
+                        });
                     }
                 });
                 if ui.button("Add Audio Track (WAV)…").clicked() {
@@ -138,7 +249,7 @@ impl App {
     pub fn ui_top(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("OpenDembow").size(18.0).strong());
-            ui.label(RichText::new("0.3").color(GREY));
+            ui.label(RichText::new("0.4").color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
@@ -195,32 +306,178 @@ impl App {
         });
     }
 
+    /// One instrument row: tinted glyph tile, name, description.
+    fn browser_row(&mut self, ui: &mut egui::Ui, inst: Instrument) {
+        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::click_and_drag());
+        let resp = resp.on_hover_cursor(egui::CursorIcon::Grab);
+        let current = matches!(
+            self.project.tracks.get(self.sel_track).map(|t| t.kind),
+            Some(TrackKind::Instrument(i)) if i == inst
+        );
+        let p = ui.painter();
+        if current {
+            p.rect_filled(rect, 12.0, tint(ACCENT, 16));
+        } else if resp.hovered() {
+            p.rect_filled(rect, 12.0, Color32::from_rgb(243, 243, 247));
+        }
+        let tile = Rect::from_min_size(pos2(rect.left() + 8.0, rect.center().y - 17.0), vec2(34.0, 34.0));
+        draw_tile(p, tile, inst);
+        let tp = p.with_clip_rect(Rect::from_min_max(rect.min, pos2(rect.right() - 36.0, rect.bottom())));
+        tp.text(pos2(tile.right() + 12.0, rect.center().y - 8.0), Align2::LEFT_CENTER, inst.name(), FontId::proportional(13.5), INK);
+        tp.text(pos2(tile.right() + 12.0, rect.center().y + 9.0), Align2::LEFT_CENTER, inst.blurb(), FontId::proportional(11.0), GREY);
+        if resp.hovered() && self.drag_inst.is_none() {
+            let c = pos2(rect.right() - 20.0, rect.center().y);
+            p.circle_filled(c, 10.0, ACCENT);
+            p.line_segment([c - vec2(4.0, 0.0), c + vec2(4.0, 0.0)], stroke(1.6, Color32::WHITE));
+            p.line_segment([c - vec2(0.0, 4.0), c + vec2(0.0, 4.0)], stroke(1.6, Color32::WHITE));
+        }
+        if resp.drag_started() {
+            self.drag_inst = Some(inst);
+        }
+        if resp.clicked() {
+            self.add_track(inst);
+        }
+    }
+
     pub fn ui_browser(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("INSTRUMENTS").size(11.0).color(GREY).strong());
-        ui.label(RichText::new("Drag onto the timeline, or click to add").size(11.5).color(GREY));
-        for (i, inst) in Instrument::ALL.iter().enumerate() {
-            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 46.0), Sense::click_and_drag());
-            let resp = resp.on_hover_cursor(egui::CursorIcon::Grab);
-            let p = ui.painter();
-            let fill = if resp.hovered() { Color32::from_rgb(235, 235, 240) } else { Color32::WHITE };
-            p.rect_filled(rect, 11.0, fill);
-            p.rect_stroke(rect, 11.0, stroke(1.0, HAIR));
-            p.circle_filled(pos2(rect.left() + 18.0, rect.center().y), 6.0, PALETTE[i % 8]);
-            p.text(pos2(rect.left() + 34.0, rect.top() + 15.0), Align2::LEFT_CENTER, inst.name(), FontId::proportional(13.5), INK);
-            p.text(pos2(rect.left() + 34.0, rect.top() + 32.0), Align2::LEFT_CENTER, inst.blurb(), FontId::proportional(11.0), GREY);
-            p.text(pos2(rect.right() - 14.0, rect.center().y), Align2::CENTER_CENTER, "⠿", FontId::proportional(14.0), GREY);
-            if resp.drag_started() {
-                self.drag_inst = Some(*inst);
-            }
-            if resp.clicked() {
-                self.add_track(*inst);
-            }
-        }
-        ui.add_space(8.0);
-        ui.label(RichText::new("AUDIO").size(11.0).color(GREY).strong());
-        if ui.add_sized([ui.available_width(), 34.0], egui::Button::new("Import WAV…")).clicked() {
-            self.import_dialog();
-        }
+        let sid = egui::Id::new("instrument_browser_state");
+        let mut st: BrowserState = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
+        let soft = Color32::from_rgb(240, 240, 245);
+
+        egui::Frame::none()
+            .fill(Color32::WHITE)
+            .rounding(Rounding::same(14.0))
+            .stroke(stroke(1.0, HAIR))
+            .inner_margin(egui::Margin::same(12.0))
+            .show(ui, |ui| {
+                ui.set_min_size(ui.available_size());
+
+                // header
+                ui.label(RichText::new("Instruments").size(17.0).strong().color(INK));
+                ui.label(RichText::new(format!("{} sounds · drag onto the timeline", Instrument::ALL.len())).size(11.5).color(GREY));
+                ui.add_space(8.0);
+
+                // search pill
+                egui::Frame::none()
+                    .fill(soft)
+                    .rounding(Rounding::same(10.0))
+                    .inner_margin(egui::Margin::symmetric(10.0, 6.0))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("🔍").size(12.0).color(GREY));
+                            let w = (ui.available_width() - 22.0).max(40.0);
+                            ui.add(egui::TextEdit::singleline(&mut st.query).hint_text("Search").frame(false).desired_width(w));
+                            if !st.query.is_empty() && ui.small_button("×").clicked() {
+                                st.query.clear();
+                            }
+                        });
+                    });
+                ui.add_space(8.0);
+
+                // category chips
+                let chip = |ui: &mut egui::Ui, label: &str, sel: bool| -> bool {
+                    let b = egui::Button::new(RichText::new(label).size(12.0).color(if sel { Color32::WHITE } else { INK }))
+                        .fill(if sel { ACCENT } else { soft })
+                        .stroke(egui::Stroke::NONE)
+                        .rounding(Rounding::same(12.0))
+                        .min_size(vec2(0.0, 24.0));
+                    ui.add(b).clicked()
+                };
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(5.0, 6.0);
+                    if chip(ui, "All", st.cat.is_none()) {
+                        st.cat = None;
+                    }
+                    for c in Category::ALL {
+                        if chip(ui, short_name(c), st.cat == Some(c)) {
+                            st.cat = Some(c);
+                        }
+                    }
+                });
+                ui.add_space(8.0);
+
+                let cat = st.cat;
+                let q = st.query.trim().to_lowercase();
+                let matches = |inst: &Instrument| -> bool {
+                    (cat.is_none() || Some(inst.category()) == cat)
+                        && (q.is_empty()
+                            || inst.name().to_lowercase().contains(&q)
+                            || inst.blurb().to_lowercase().contains(&q)
+                            || inst.category().name().to_lowercase().contains(&q))
+                };
+
+                // scrollable list
+                let h = (ui.available_height() - 50.0).max(100.0);
+                let mut area = egui::ScrollArea::vertical().max_height(h).auto_shrink([false, false]);
+                if let Some(o) = st.force.take() {
+                    area = area.vertical_scroll_offset(o);
+                }
+                let out = area.show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    let mut shown = 0;
+                    for c in Category::ALL {
+                        let items: Vec<Instrument> =
+                            Instrument::ALL.iter().copied().filter(|i| i.category() == c && matches(i)).collect();
+                        if items.is_empty() {
+                            continue;
+                        }
+                        if cat.is_none() {
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                let (r, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
+                                ui.painter().circle_filled(r.center(), 3.5, PALETTE[c as usize % 8]);
+                                ui.label(RichText::new(c.name().to_uppercase()).size(10.5).color(GREY).strong());
+                            });
+                            ui.add_space(2.0);
+                        }
+                        for inst in items {
+                            self.browser_row(ui, inst);
+                            shown += 1;
+                        }
+                    }
+                    if shown == 0 {
+                        ui.add_space(20.0);
+                        ui.vertical_centered(|ui| {
+                            ui.label(RichText::new("No instrument found").color(GREY));
+                        });
+                    }
+                });
+
+                // while dragging, the list keeps scrolling: wheel + auto-scroll near the edges
+                if self.drag_inst.is_some() {
+                    if let Some(p) = ui.ctx().pointer_latest_pos() {
+                        let r = out.inner_rect;
+                        if p.x >= r.left() && p.x <= r.right() && p.y >= r.top() - 40.0 && p.y <= r.bottom() + 40.0 {
+                            let zone = 48.0;
+                            let edge = if p.y < r.top() + zone {
+                                -(1.0 - ((p.y - r.top()) / zone).clamp(0.0, 1.0))
+                            } else if p.y > r.bottom() - zone {
+                                1.0 - ((r.bottom() - p.y) / zone).clamp(0.0, 1.0)
+                            } else {
+                                0.0
+                            };
+                            let wheel = ui.ctx().input(|i| i.raw_scroll_delta.y);
+                            let d = edge * 14.0 - wheel;
+                            if d != 0.0 {
+                                st.force = Some((out.state.offset.y + d).max(0.0));
+                            }
+                        }
+                    }
+                    ui.ctx().request_repaint();
+                }
+
+                ui.add_space(8.0);
+                let imp = egui::Button::new(RichText::new("Import WAV…").size(13.0).color(INK))
+                    .fill(soft)
+                    .stroke(egui::Stroke::NONE)
+                    .rounding(Rounding::same(10.0));
+                if ui.add_sized([ui.available_width(), 34.0], imp).clicked() {
+                    self.import_dialog();
+                }
+            });
+
+        ui.ctx().data_mut(|d| d.insert_temp(sid, st));
     }
 
     pub fn ui_help(&mut self, ctx: &egui::Context) {
@@ -233,7 +490,7 @@ impl App {
             .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.label(RichText::new("Quick start").size(15.0).strong());
-                ui.label("1. Drag an instrument from the left onto the timeline (or click it).");
+                ui.label("1. Pick a category on the left, then drag an instrument onto the timeline (or click it).");
                 ui.label("2. Double-click an empty lane to create a clip, then add notes in the piano roll.");
                 ui.label("3. Play any instrument live with the on-screen keyboard or your computer keys.");
                 ui.label("4. Press Space to play. Drag clips to move them. Use × on a track to delete it.");
@@ -263,7 +520,7 @@ impl App {
                     }
                 });
                 ui.add_space(10.0);
-                ui.label(RichText::new("OpenDembow 0.3 - made with Rust, egui and cpal.").color(GREY).size(12.0));
+                ui.label(RichText::new("OpenDembow 0.4 - made with Rust, egui and cpal.").color(GREY).size(12.0));
             });
         self.show_help = open;
     }

@@ -1,7 +1,48 @@
-//! Built-in instruments: eight synthesized voices, no samples required.
+//! Built-in instruments: 24 synthesized voices grouped in categories, no samples required.
 
 use std::f32::consts::TAU;
 
+/// Browser categories (like Ableton's sidebar).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Category {
+    Keys,
+    Organs,
+    Leads,
+    Basses,
+    Plucked,
+    Pads,
+    Mallets,
+    Brass,
+}
+
+impl Category {
+    pub const ALL: [Category; 8] = [
+        Category::Keys,
+        Category::Organs,
+        Category::Leads,
+        Category::Basses,
+        Category::Plucked,
+        Category::Pads,
+        Category::Mallets,
+        Category::Brass,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Category::Keys => "Keys",
+            Category::Organs => "Organs",
+            Category::Leads => "Leads",
+            Category::Basses => "Basses",
+            Category::Plucked => "Plucked",
+            Category::Pads => "Pads & Strings",
+            Category::Mallets => "Mallets & Bells",
+            Category::Brass => "Brass & Winds",
+        }
+    }
+}
+
+// NOTE: keep the first 8 variants (and their order in ALL) unchanged so that
+// projects saved with an older version still load the same instruments.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Instrument {
     Piano,
@@ -12,10 +53,27 @@ pub enum Instrument {
     Pluck,
     Strings,
     Bell,
+    // --- new in 0.4 ---
+    Clavinet,
+    Harpsichord,
+    ChurchOrgan,
+    SquareLead,
+    SuperSaw,
+    SubBass,
+    AcidBass,
+    Guitar,
+    Harp,
+    WarmPad,
+    Choir,
+    Marimba,
+    MusicBox,
+    Vibraphone,
+    Brass,
+    Flute,
 }
 
 impl Instrument {
-    pub const ALL: [Instrument; 8] = [
+    pub const ALL: [Instrument; 24] = [
         Instrument::Piano,
         Instrument::ElectricPiano,
         Instrument::Organ,
@@ -24,6 +82,22 @@ impl Instrument {
         Instrument::Pluck,
         Instrument::Strings,
         Instrument::Bell,
+        Instrument::Clavinet,
+        Instrument::Harpsichord,
+        Instrument::ChurchOrgan,
+        Instrument::SquareLead,
+        Instrument::SuperSaw,
+        Instrument::SubBass,
+        Instrument::AcidBass,
+        Instrument::Guitar,
+        Instrument::Harp,
+        Instrument::WarmPad,
+        Instrument::Choir,
+        Instrument::Marimba,
+        Instrument::MusicBox,
+        Instrument::Vibraphone,
+        Instrument::Brass,
+        Instrument::Flute,
     ];
 
     pub fn name(self) -> &'static str {
@@ -36,6 +110,22 @@ impl Instrument {
             Instrument::Pluck => "Pluck",
             Instrument::Strings => "Strings Pad",
             Instrument::Bell => "Bell",
+            Instrument::Clavinet => "Clavinet",
+            Instrument::Harpsichord => "Harpsichord",
+            Instrument::ChurchOrgan => "Church Organ",
+            Instrument::SquareLead => "Square Lead",
+            Instrument::SuperSaw => "Super Saw",
+            Instrument::SubBass => "Sub Bass",
+            Instrument::AcidBass => "Acid Bass",
+            Instrument::Guitar => "Nylon Guitar",
+            Instrument::Harp => "Harp",
+            Instrument::WarmPad => "Warm Pad",
+            Instrument::Choir => "Choir Ahh",
+            Instrument::Marimba => "Marimba",
+            Instrument::MusicBox => "Music Box",
+            Instrument::Vibraphone => "Vibraphone",
+            Instrument::Brass => "Brass Section",
+            Instrument::Flute => "Flute",
         }
     }
 
@@ -49,6 +139,35 @@ impl Instrument {
             Instrument::Pluck => "Short, plucked string",
             Instrument::Strings => "Slow, lush ensemble",
             Instrument::Bell => "Glassy inharmonic bell",
+            Instrument::Clavinet => "Funky, bright and snappy",
+            Instrument::Harpsichord => "Baroque, crisp and dry",
+            Instrument::ChurchOrgan => "Big pipe organ, slow attack",
+            Instrument::SquareLead => "Hollow chiptune-style lead",
+            Instrument::SuperSaw => "Five fat detuned saws",
+            Instrument::SubBass => "Deep, clean sine sub",
+            Instrument::AcidBass => "Squelchy resonant saw",
+            Instrument::Guitar => "Soft nylon-string pluck",
+            Instrument::Harp => "Airy, long ringing strings",
+            Instrument::WarmPad => "Slow, dark, evolving pad",
+            Instrument::Choir => "Vocal 'ahh' formants",
+            Instrument::Marimba => "Woody mallet, short",
+            Instrument::MusicBox => "Tiny, sparkling comb",
+            Instrument::Vibraphone => "Metal bars with tremolo",
+            Instrument::Brass => "Swelling brass stack",
+            Instrument::Flute => "Breathy, soft wind",
+        }
+    }
+
+    pub fn category(self) -> Category {
+        match self {
+            Instrument::Piano | Instrument::ElectricPiano | Instrument::Clavinet | Instrument::Harpsichord => Category::Keys,
+            Instrument::Organ | Instrument::ChurchOrgan => Category::Organs,
+            Instrument::SynthLead | Instrument::SquareLead | Instrument::SuperSaw => Category::Leads,
+            Instrument::SynthBass | Instrument::SubBass | Instrument::AcidBass => Category::Basses,
+            Instrument::Pluck | Instrument::Guitar | Instrument::Harp => Category::Plucked,
+            Instrument::Strings | Instrument::WarmPad | Instrument::Choir => Category::Pads,
+            Instrument::Bell | Instrument::Marimba | Instrument::MusicBox | Instrument::Vibraphone => Category::Mallets,
+            Instrument::Brass | Instrument::Flute => Category::Brass,
         }
     }
 
@@ -62,6 +181,22 @@ impl Instrument {
             Instrument::Pluck => 12.0,
             Instrument::Strings => 3.5,
             Instrument::Bell => 6.0,
+            Instrument::Clavinet => 25.0,
+            Instrument::Harpsichord => 40.0,
+            Instrument::ChurchOrgan => 18.0,
+            Instrument::SquareLead => 14.0,
+            Instrument::SuperSaw => 10.0,
+            Instrument::SubBass => 25.0,
+            Instrument::AcidBass => 28.0,
+            Instrument::Guitar => 16.0,
+            Instrument::Harp => 8.0,
+            Instrument::WarmPad => 2.5,
+            Instrument::Choir => 3.0,
+            Instrument::Marimba => 12.0,
+            Instrument::MusicBox => 8.0,
+            Instrument::Vibraphone => 5.0,
+            Instrument::Brass => 12.0,
+            Instrument::Flute => 10.0,
         }
     }
 }
@@ -99,8 +234,9 @@ pub struct Voice {
     t: f32,
     vel: f32,
     rel: Option<f32>,
-    ph: [f32; 3],
+    ph: [f32; 5],
     lp: f32,
+    lp2: f32,
 }
 
 impl Voice {
@@ -116,8 +252,9 @@ impl Voice {
             t: 0.0,
             vel,
             rel: None,
-            ph: [0.0; 3],
+            ph: [0.0; 5],
             lp: 0.0,
+            lp2: 0.0,
         }
     }
 
@@ -219,6 +356,178 @@ impl Voice {
                     }
                 }
                 (s, 0.002, 0.3)
+            }
+
+            // ------------------------------------------------ Keys
+            Instrument::Clavinet => {
+                let a = TAU * f * t;
+                let mut s = 0.0;
+                for k in 1..=8 {
+                    let kf = k as f32;
+                    if f * kf > 16000.0 {
+                        break;
+                    }
+                    s += (a * kf).sin() / kf.powf(0.7) * (-(3.0 + 2.5 * kf) * t).exp();
+                }
+                (s * 0.8, 0.002, 0.3)
+            }
+            Instrument::Harpsichord => {
+                let a = TAU * f * t;
+                let mut s = 0.0;
+                for k in 1..=14 {
+                    let kf = k as f32;
+                    if f * kf > 16000.0 {
+                        break;
+                    }
+                    s += (a * kf).sin() / kf * (-(2.5 + 0.4 * kf) * t).exp();
+                }
+                (s * 0.9, 0.001, 0.3)
+            }
+
+            // ------------------------------------------------ Organs
+            Instrument::ChurchOrgan => {
+                let bars = [(0.5, 0.6), (1.0, 1.0), (2.0, 0.7), (3.0, 0.4), (4.0, 0.5), (5.0, 0.2), (8.0, 0.2)];
+                let trem = 1.0 + 0.03 * (TAU * 5.0 * t).sin();
+                let s: f32 = bars.iter().map(|(h, a)| a * (TAU * f * h * t).sin()).sum();
+                (s / 3.6 * trem, 0.03, 0.26)
+            }
+
+            // ------------------------------------------------ Leads
+            Instrument::SquareLead => {
+                self.ph[0] = (self.ph[0] + dp).fract();
+                self.ph[1] = (self.ph[1] + dp * 1.004).fract();
+                let raw = (square(self.ph[0], dp) + square(self.ph[1], dp * 1.004)) * 0.5;
+                self.lp += lp_a(1500.0 + 3500.0 * (-4.0 * t).exp()) * (raw - self.lp);
+                (self.lp, 0.005, 0.22)
+            }
+            Instrument::SuperSaw => {
+                let det = [0.985, 0.993, 1.0, 1.007, 1.015];
+                let mut raw = 0.0;
+                for i in 0..5 {
+                    self.ph[i] = (self.ph[i] + dp * det[i]).fract();
+                    raw += saw(self.ph[i], dp) / 5.0;
+                }
+                self.lp += lp_a(3000.0 + 5000.0 * (-2.0 * t).exp()) * (raw - self.lp);
+                (self.lp, 0.01, 0.28)
+            }
+
+            // ------------------------------------------------ Basses
+            Instrument::SubBass => {
+                let a = TAU * f * t;
+                let s = a.sin() + 0.25 * (2.0 * a).sin() * (-6.0 * t).exp();
+                (s, 0.006, 0.5)
+            }
+            Instrument::AcidBass => {
+                self.ph[0] = (self.ph[0] + dp).fract();
+                let raw = saw(self.ph[0], dp);
+                let a = lp_a(200.0 + 2800.0 * (-7.0 * t).exp());
+                self.lp += a * (raw - self.lp);
+                self.lp2 += a * (self.lp - self.lp2);
+                (self.lp2 * 1.8, 0.003, 0.4)
+            }
+
+            // ------------------------------------------------ Plucked
+            Instrument::Guitar => {
+                let a = TAU * f * t;
+                let mut s = 0.0;
+                for k in 1..=14 {
+                    let kf = k as f32;
+                    if f * kf > 16000.0 {
+                        break;
+                    }
+                    s += (a * kf).sin() / kf.powf(1.1) * (-(1.2 + 0.9 * kf) * t).exp();
+                }
+                (s, 0.002, 0.32)
+            }
+            Instrument::Harp => {
+                let a = TAU * f * t;
+                let mut s = 0.0;
+                for k in 1..=8 {
+                    let kf = k as f32;
+                    if f * kf > 16000.0 {
+                        break;
+                    }
+                    s += (a * kf).sin() / kf.powf(1.3) * (-(1.0 + 0.5 * kf) * t).exp();
+                }
+                (s, 0.002, 0.34)
+            }
+
+            // ------------------------------------------------ Pads & strings
+            Instrument::WarmPad => {
+                let det = [0.997, 1.0, 1.003];
+                let mut raw = 0.0;
+                for i in 0..3 {
+                    self.ph[i] = (self.ph[i] + dp * det[i]).fract();
+                    raw += saw(self.ph[i], dp) / 3.0;
+                }
+                raw += 0.4 * (TAU * f * t).sin();
+                self.lp += lp_a(600.0 + 900.0 * (1.0 - (-0.8 * t).exp())) * (raw - self.lp);
+                (self.lp, 0.6, 0.25)
+            }
+            Instrument::Choir => {
+                let a = TAU * f * t;
+                let mut s = 0.0;
+                for k in 1..=24 {
+                    let kf = k as f32;
+                    let fk = f * kf;
+                    if fk > 5000.0 {
+                        break;
+                    }
+                    let w = (-((fk - 800.0) / 350.0).powi(2)).exp()
+                        + 0.7 * (-((fk - 1200.0) / 300.0).powi(2)).exp()
+                        + 0.15 * (-((fk - 2600.0) / 500.0).powi(2)).exp();
+                    s += w / kf.sqrt() * ((a * kf).sin() + (a * kf * 1.004).sin()) * 0.5;
+                }
+                let norm = (200.0 / f.max(200.0)).sqrt();
+                (s * 0.35 * norm, 0.25, 0.2)
+            }
+
+            // ------------------------------------------------ Mallets & bells
+            Instrument::Marimba => {
+                let a = TAU * f * t;
+                let mut s = a.sin() * (-6.0 * t).exp();
+                if f * 4.0 < 16000.0 {
+                    s += 0.3 * (a * 4.0).sin() * (-14.0 * t).exp();
+                }
+                if f * 9.2 < 16000.0 {
+                    s += 0.1 * (a * 9.2).sin() * (-25.0 * t).exp();
+                }
+                (s, 0.001, 0.4)
+            }
+            Instrument::MusicBox => {
+                let parts = [(1.0, 1.0, 2.0), (2.0, 0.3, 3.5), (4.1, 0.25, 5.0)];
+                let mut s = 0.0;
+                for (r, a, d) in parts {
+                    if f * r < 16000.0 {
+                        s += a * (TAU * f * r * t).sin() * (-d * t).exp();
+                    }
+                }
+                (s, 0.001, 0.3)
+            }
+            Instrument::Vibraphone => {
+                let a = TAU * f * t;
+                let trem = 0.8 + 0.2 * (TAU * 5.0 * t).sin();
+                let mut s = a.sin() * (-0.9 * t).exp();
+                if f * 4.0 < 16000.0 {
+                    s += 0.15 * (a * 4.0).sin() * (-3.0 * t).exp();
+                }
+                (s * trem, 0.002, 0.35)
+            }
+
+            // ------------------------------------------------ Brass & winds
+            Instrument::Brass => {
+                self.ph[0] = (self.ph[0] + dp).fract();
+                self.ph[1] = (self.ph[1] + dp * 1.002).fract();
+                let raw = (saw(self.ph[0], dp) + saw(self.ph[1], dp)) * 0.5;
+                self.lp += lp_a(400.0 + 3000.0 * (1.0 - (-8.0 * t).exp())) * (raw - self.lp);
+                (self.lp, 0.06, 0.3)
+            }
+            Instrument::Flute => {
+                let a = TAU * f * t;
+                let vib = 0.25 * (1.0 - (-2.0 * t).exp()) * (TAU * 5.0 * t).sin();
+                let tone = (a + vib).sin() + 0.15 * (2.0 * (a + vib)).sin() + 0.05 * (3.0 * (a + vib)).sin();
+                let noise = ((t * 12345.678).sin() * 43758.5453).fract() - 0.5;
+                (tone + 0.06 * noise, 0.08, 0.3)
             }
         };
         let mut g = (t / attack).min(1.0) * self.vel * level;

@@ -1,6 +1,6 @@
 [package]
 name = "opendembow"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "OpenDembow - a modern, elegant digital audio workstation written in Rust."
 license = "GPL-3.0-or-later"
