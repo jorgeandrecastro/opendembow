@@ -1,6 +1,6 @@
-Markdown
-
 # OpenDembow 0.3
+
+![OpenDembow Interface](images/image1.png)
 
 A modern, elegant digital audio workstation written in Rust. Clean light interface, one accent colour,
 rounded everything.
