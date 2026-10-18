@@ -22,9 +22,9 @@ jobs:
             binary_name: opendembow.exe
             output_name: opendembow-windows-amd64.exe
           - os: macos-latest
-            target: x86_64-apple-darwin
+            target: aarch64-apple-darwin
             binary_name: opendembow
-            output_name: opendembow-macos-amd64
+            output_name: opendembow-macos-arm64
 
     steps:
       - name: Code checkout
@@ -51,7 +51,7 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.output_name }}
 
       - name: Publier la Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
