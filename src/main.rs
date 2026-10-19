@@ -41,6 +41,10 @@ enum Drag {
     Clip { t: usize, c: usize, grab: f64 },
     NoteMove { idx: usize, grab_beat: f64, grab_key: i32 },
     NoteResize { idx: usize },
+    /// Drag the left edge of a note (its end stays fixed).
+    NoteResizeL { idx: usize, end: f64 },
+    /// Drag the left / right edge of a clip.
+    ClipEdge { t: usize, c: usize, left: bool },
 }
 
 /// Tab shown in the bottom panel.
@@ -89,6 +93,8 @@ struct App {
     clipboard: Option<edit::Clipboard>,
     /// Pen (draw / edit) mode.
     pen: bool,
+    /// The clip as it was when an edge drag began.
+    edge_orig: Option<Clip>,
     mcp: Option<std::sync::mpsc::Receiver<mcp::Call>>,
 }
 
@@ -160,6 +166,7 @@ impl App {
             detail: DetailTab::Roll,
             clipboard: None,
             pen: false,
+            edge_orig: None,
             mcp,
         };
         app.select_clip(0, 0);

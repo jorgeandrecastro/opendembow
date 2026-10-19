@@ -85,7 +85,7 @@ impl App {
         let bx = |b: f64| lanes.left() + ((b - sx) as f32) * ppb;
         let beat_at = |x: f32| ((x - lanes.left()) / ppb) as f64 + sx;
         let track_at = |y: f32| ((y - lanes.top() + sy) / TRACK_H).floor() as i64;
-        let grid = if ppb >= 64.0 { 0.25 } else if ppb >= 28.0 { 0.5 } else { 1.0 };
+        let grid: f64 = if ppb >= 64.0 { 0.25 } else if ppb >= 28.0 { 0.5 } else { 1.0 };
         let clip_at = |proj: &Project, p: Pos2| -> Option<(usize, usize)> {
             let ti = track_at(p.y);
             if ti < 0 {
@@ -100,15 +100,49 @@ impl App {
                 .map(|ci| (ti, ci))
         };
 
+        // which clip edge is under the pointer: Some((track, clip, is_left_edge))
+        let edge_at = |proj: &Project, p: Pos2| -> Option<(usize, usize, bool)> {
+            let (t, c) = clip_at(proj, p)?;
+            let cl = &proj.tracks[t].clips[c];
+            let (x0, x1) = (bx(cl.start), bx(cl.start + cl.len_beats(proj.bpm, proj.sr)));
+            let z = 7.0f32.min((x1 - x0) / 3.0);
+            if x1 - p.x <= z {
+                Some((t, c, false))
+            } else if p.x - x0 <= z {
+                Some((t, c, true))
+            } else {
+                None
+            }
+        };
+        if lr.hovered() || lr.dragged() {
+            if let Some(h) = ui.input(|i| i.pointer.hover_pos()) {
+                if edge_at(&self.project, h).is_some() || matches!(self.drag, Drag::ClipEdge { .. }) {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                } else if self.pen {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                }
+            }
+        }
+
         // interactions
         if rr.clicked() || rr.dragged() {
             if let Some(p) = rr.interact_pointer_pos() {
                 self.engine.set_pos(beat_at(p.x).max(0.0), bpm, sr);
             }
         }
+        let free = ui.input(|i| i.modifiers.alt); // hold Alt: no snapping
+        let snap = |b: f64| if free { b } else { (b / grid).round() * grid };
         if lr.drag_started() {
-            if let Some(p) = lr.interact_pointer_pos() {
-                if let Some((t, c)) = clip_at(&self.project, p) {
+            // use where the mouse went down, not where it is after the drag threshold
+            let origin = ui.input(|i| i.pointer.press_origin()).or_else(|| lr.interact_pointer_pos());
+            if let Some(p) = origin {
+                if let Some((t, c, left)) = edge_at(&self.project, p) {
+                    // grab a clip edge: shorten / lengthen
+                    self.checkpoint();
+                    self.select_clip(t, c);
+                    self.edge_orig = Some(self.project.tracks[t].clips[c].clone());
+                    self.drag = Drag::ClipEdge { t, c, left };
+                } else if let Some((t, c)) = clip_at(&self.project, p) {
                     self.checkpoint();
                     self.select_clip(t, c);
                     let st = self.project.tracks[t].clips[c].start;
@@ -116,31 +150,75 @@ impl App {
                 } else {
                     let ti = track_at(p.y);
                     if ti >= 0 && (ti as usize) < nt {
-                        self.sel_track = ti as usize;
+                        let ti = ti as usize;
+                        self.sel_track = ti;
+                        if self.pen && matches!(self.project.tracks[ti].kind, TrackKind::Instrument(_)) {
+                            // pen: press and drag on an empty lane draws a clip
+                            self.checkpoint();
+                            let start = ((beat_at(p.x) / grid).floor() * grid).max(0.0);
+                            let clip = Clip { name: "Clip".into(), start, len: grid.max(0.25), kind: ClipKind::Midi(Vec::new()) };
+                            self.project.tracks[ti].clips.push(clip.clone());
+                            let n = self.project.tracks[ti].clips.len() - 1;
+                            self.select_clip(ti, n);
+                            self.edge_orig = Some(clip);
+                            self.drag = Drag::ClipEdge { t: ti, c: n, left: false };
+                            self.push();
+                        }
                     }
                 }
             }
         }
         if lr.dragged() {
-            if let (Drag::Clip { t, c, grab }, Some(p)) = (self.drag, lr.interact_pointer_pos()) {
-                let b = (((beat_at(p.x) - grab) / grid).round() * grid).max(0.0);
-                self.project.tracks[t].clips[c].start = b;
-                self.push();
+            if let Some(p) = lr.interact_pointer_pos() {
+                match self.drag {
+                    Drag::Clip { t, c, grab } => {
+                        let b = snap(beat_at(p.x) - grab).max(0.0);
+                        self.project.tracks[t].clips[c].start = b;
+                        self.push();
+                    }
+                    Drag::ClipEdge { t, c, left } => {
+                        // always computed from the clip as it was when the drag began
+                        if let Some(orig) = self.edge_orig.clone() {
+                            let b = snap(beat_at(p.x)).max(0.0);
+                            if let Some(nc) = crate::edit::resize_clip(&orig, left, b, bpm, sr) {
+                                if let Some(slot) = self.project.tracks.get_mut(t).and_then(|tr| tr.clips.get_mut(c)) {
+                                    *slot = nc;
+                                }
+                                self.push();
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
-        if lr.drag_stopped() && matches!(self.drag, Drag::Clip { .. }) {
+        if lr.drag_stopped() && matches!(self.drag, Drag::Clip { .. } | Drag::ClipEdge { .. }) {
             self.drag = Drag::None;
+            self.edge_orig = None;
         }
         if lr.clicked() {
             if let Some(p) = lr.interact_pointer_pos() {
+                let ctrl = ui.input(|i| i.modifiers.command);
                 if let Some((t, c)) = clip_at(&self.project, p) {
                     self.select_clip(t, c);
+                    if ctrl {
+                        // Ctrl+click cuts the clip at the pointer
+                        if let Err(e) = self.split_clip_at(t, c, snap(beat_at(p.x))) {
+                            self.status = format!("Cannot cut: {e}");
+                        }
+                    }
                 } else {
                     let ti = track_at(p.y);
                     if ti >= 0 && (ti as usize) < nt {
-                        self.sel_track = ti as usize;
+                        let ti = ti as usize;
+                        self.sel_track = ti;
                         self.sel_clip = None;
                         self.sel_note = None;
+                        if self.pen {
+                            // pen: a single click on an empty lane creates a 4-beat clip
+                            let start = (beat_at(p.x) / 4.0).floor().max(0.0) * 4.0;
+                            self.add_clip(ti, start, 4.0);
+                        }
                     }
                 }
             }
@@ -255,6 +333,10 @@ impl App {
                 }
                 if self.sel_clip == Some((ti, ci)) {
                     cp.rect_stroke(cr, 8.0, stroke(2.0, INK));
+                    // grips: drag these edges to shorten or lengthen the clip
+                    for gx in [cr.left() + 3.5, cr.right() - 3.5] {
+                        cp.rect_filled(Rect::from_center_size(pos2(gx, cr.center().y + 8.0), vec2(3.0, 20.0)), 1.5, INK);
+                    }
                 }
             }
         }
@@ -393,6 +475,21 @@ impl App {
             p.line_segment([pos2(hx, ruler.top() + 6.0), pos2(hx, lanes.bottom())], stroke(2.0, RED));
             p.circle_filled(pos2(hx, ruler.top() + 8.0), 4.5, RED);
         }
+    }
+}
+
+impl App {
+    /// New empty MIDI clip on an instrument track (used by the pen). False on audio tracks.
+    pub fn add_clip(&mut self, ti: usize, start: f64, len: f64) -> bool {
+        if !matches!(self.project.tracks.get(ti).map(|t| t.kind), Some(TrackKind::Instrument(_))) {
+            return false;
+        }
+        self.checkpoint();
+        let n = self.project.tracks[ti].clips.len();
+        self.project.tracks[ti].clips.push(Clip { name: "Clip".into(), start, len, kind: ClipKind::Midi(Vec::new()) });
+        self.select_clip(ti, n);
+        self.push();
+        true
     }
 }
 

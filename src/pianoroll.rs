@@ -42,7 +42,7 @@ impl App {
             let hint = if self.pen {
                 "Pen: click or drag to draw notes · drag a note to move · right-click: delete"
             } else {
-                "Double-click: add note · drag: move · drag right edge: resize · Ctrl+click: cut"
+                "Double-click: add note · drag: move · drag either edge: resize · Ctrl+click: cut"
             };
             ui.label(RichText::new(hint).size(11.5).color(GREY));
 
@@ -84,12 +84,21 @@ impl App {
         let beat_at = |x: f32| ((x - grid.left()) / ppb) as f64 + sx;
         let key_at = |y: f32| top - ((y - grid.top()) / ROW_H).floor() as i32;
         let g = self.grid;
-        let hit = |notes: &Vec<Note>, p: Pos2| -> Option<(usize, bool)> {
+        // hit test: (note index, edge) with edge 0 = body, 1 = right edge, 2 = left edge
+        let hit = |notes: &Vec<Note>, p: Pos2| -> Option<(usize, u8)> {
             for (i, n) in notes.iter().enumerate().rev() {
                 let y = grid.top() + (top - n.key as i32) as f32 * ROW_H;
                 let r = Rect::from_min_max(pos2(gx(n.start), y), pos2(gx(n.start + n.len), y + ROW_H));
                 if r.contains(p) {
-                    return Some((i, p.x > r.right() - 6.0));
+                    let z = 6.0f32.min(r.width() / 3.0);
+                    let edge = if p.x > r.right() - z {
+                        1
+                    } else if p.x < r.left() + z {
+                        2
+                    } else {
+                        0
+                    };
+                    return Some((i, edge));
                 }
             }
             None
@@ -97,17 +106,19 @@ impl App {
 
         // note editing
         if gr.drag_started() {
-            if let Some(p) = gr.interact_pointer_pos() {
+            // use where the mouse went down, not where it is after the drag threshold
+            let origin = ui.input(|i| i.pointer.press_origin()).or_else(|| gr.interact_pointer_pos());
+            if let Some(p) = origin {
                 let h = self.notes_ref(t, c).and_then(|n| hit(n, p));
                 if let Some((i, edge)) = h {
                     self.checkpoint();
                     self.sel_note = Some(i);
                     let n = self.notes_ref(t, c).map(|v| v[i].clone());
                     if let Some(n) = n {
-                        self.drag = if edge {
-                            Drag::NoteResize { idx: i }
-                        } else {
-                            Drag::NoteMove { idx: i, grab_beat: beat_at(p.x) - n.start, grab_key: key_at(p.y) - n.key as i32 }
+                        self.drag = match edge {
+                            1 => Drag::NoteResize { idx: i },
+                            2 => Drag::NoteResizeL { idx: i, end: n.start + n.len },
+                            _ => Drag::NoteMove { idx: i, grab_beat: beat_at(p.x) - n.start, grab_key: key_at(p.y) - n.key as i32 },
                         };
                         self.audition(t, n.key);
                     }
@@ -159,15 +170,33 @@ impl App {
                         self.fit_clip(t, c);
                         self.push();
                     }
+                    Drag::NoteResizeL { idx, end } => {
+                        let ns = (((beat_at(p.x) / g).round() * g).max(0.0)).min((end - g).max(0.0));
+                        if let Some(n) = self.notes_mut(t, c).and_then(|v| v.get_mut(idx)) {
+                            n.start = ns;
+                            n.len = end - ns;
+                        }
+                        self.fit_clip(t, c);
+                        self.push();
+                    }
                     _ => {}
                 }
             }
         }
-        if gr.drag_stopped() && matches!(self.drag, Drag::NoteMove { .. } | Drag::NoteResize { .. }) {
+        if gr.drag_stopped() && matches!(self.drag, Drag::NoteMove { .. } | Drag::NoteResize { .. } | Drag::NoteResizeL { .. }) {
             self.drag = Drag::None;
         }
-        if gr.hovered() && self.pen {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        if gr.hovered() || gr.dragged() {
+            let on_edge = ui
+                .input(|i| i.pointer.hover_pos())
+                .and_then(|hp| self.notes_ref(t, c).and_then(|n| hit(n, hp)))
+                .map_or(false, |(_, e)| e != 0)
+                || matches!(self.drag, Drag::NoteResize { .. } | Drag::NoteResizeL { .. });
+            if on_edge {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            } else if self.pen {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            }
         }
         if gr.clicked() || gr.double_clicked() {
             if let Some(p) = gr.interact_pointer_pos() {

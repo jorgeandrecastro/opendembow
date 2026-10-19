@@ -25,7 +25,7 @@ fn snap(b: f64) -> f64 {
 }
 
 /// Cut a clip `cut` beats after its own start. Returns (left, right), or None if `cut` is not inside the clip.
-fn split_data(clip: &Clip, cut: f64, bpm: f64, sr: f32) -> Option<(Clip, Clip)> {
+pub fn split_data(clip: &Clip, cut: f64, bpm: f64, sr: f32) -> Option<(Clip, Clip)> {
     let total = clip.len_beats(bpm, sr);
     if cut <= 0.001 || cut >= total - 0.001 {
         return None;
@@ -60,6 +60,57 @@ fn split_data(clip: &Clip, cut: f64, bpm: f64, sr: f32) -> Option<(Clip, Clip)> 
             let left = Clip { name: clip.name.clone(), start: clip.start, len: 0.0, kind: ClipKind::Audio(Arc::new(d[..i].to_vec())) };
             let right = Clip { name: clip.name.clone(), start: clip.start + cut, len: 0.0, kind: ClipKind::Audio(Arc::new(d[i..].to_vec())) };
             Some((left, right))
+        }
+    }
+}
+
+/// New version of `orig` after dragging its left or right edge to the absolute position `beat`.
+/// Always computed from the original clip, so dragging back restores everything.
+/// MIDI clips can grow on both sides; audio clips can only be trimmed (the sound is not stretched).
+pub fn resize_clip(orig: &Clip, left: bool, beat: f64, bpm: f64, sr: f32) -> Option<Clip> {
+    let total = orig.len_beats(bpm, sr);
+    let end = orig.start + total;
+    let min = 0.25;
+    if left {
+        let b = beat.min(end - min);
+        let cut = b - orig.start;
+        if cut > 0.0005 {
+            split_data(orig, cut, bpm, sr).map(|(_, r)| r)
+        } else if cut < -0.0005 {
+            match &orig.kind {
+                ClipKind::Midi(notes) => {
+                    let b = b.max(0.0);
+                    let shift = orig.start - b;
+                    let moved = notes
+                        .iter()
+                        .map(|n| {
+                            let mut n = n.clone();
+                            n.start += shift;
+                            n
+                        })
+                        .collect();
+                    Some(Clip { name: orig.name.clone(), start: b, len: total + shift, kind: ClipKind::Midi(moved) })
+                }
+                ClipKind::Audio(_) => Some(orig.clone()),
+            }
+        } else {
+            Some(orig.clone())
+        }
+    } else {
+        let new_len = (beat - orig.start).max(min);
+        if new_len < total - 0.0005 {
+            split_data(orig, new_len, bpm, sr).map(|(l, _)| l)
+        } else if new_len > total + 0.0005 {
+            match &orig.kind {
+                ClipKind::Midi(_) => {
+                    let mut c = orig.clone();
+                    c.len = new_len;
+                    Some(c)
+                }
+                ClipKind::Audio(_) => Some(orig.clone()),
+            }
+        } else {
+            Some(orig.clone())
         }
     }
 }
