@@ -324,7 +324,7 @@ impl App {
                 if ui.add(help).on_hover_text("Help & shortcuts (F1)").clicked() {
                     self.show_help = true;
                 }
-                ui.menu_button("Export ▾", |ui| {
+                ui.menu_button("Export", |ui| {
                     if ui.button("Mixdown (WAV)…").clicked() {
                         self.export_mixdown();
                         ui.close_menu();
@@ -547,10 +547,14 @@ impl App {
                     ("Z / X", "Keyboard octave down / up"),
                     ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"),
                     ("Ctrl+C / Ctrl+X / Ctrl+V", "Copy / cut / paste clip or note (at playhead)"),
+                    ("P / Esc", "Pen (draw / edit) mode on / off"),
                     ("B", "Split selected clip at the playhead"),
                     ("[  /  ]", "Trim clip start / end to the playhead"),
                     ("Ctrl+D", "Duplicate selected clip"),
                     ("Delete", "Delete selected note or clip"),
+                    ("Pen + click / drag", "Draw a note (drag sets its length)"),
+                    ("Double-click (arrow)", "Add a note"),
+                    ("Ctrl+click note", "Cut the note at the click (B cuts at the playhead)"),
                     ("Right-click note", "Delete note"),
                     ("Right-click track", "Change instrument / delete track"),
                     ("Ctrl+S / Ctrl+O", "Save / open project"),

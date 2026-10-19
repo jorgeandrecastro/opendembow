@@ -70,6 +70,8 @@ struct App {
     pr_scroll: f64,
     pr_top: i32,
     last_len: f64,
+    /// Piano roll snap, in beats.
+    grid: f64,
     drag: Drag,
     drag_inst: Option<Instrument>,
     octave: i32,
@@ -85,6 +87,8 @@ struct App {
     // 0.5
     detail: DetailTab,
     clipboard: Option<edit::Clipboard>,
+    /// Pen (draw / edit) mode.
+    pen: bool,
     mcp: Option<std::sync::mpsc::Receiver<mcp::Call>>,
 }
 
@@ -140,6 +144,7 @@ impl App {
             pr_scroll: 0.0,
             pr_top: 72,
             last_len: 0.5,
+            grid: 0.25,
             drag: Drag::None,
             drag_inst: None,
             octave: 3,
@@ -154,6 +159,7 @@ impl App {
             metronome: metronome::Metronome::new(),
             detail: DetailTab::Roll,
             clipboard: None,
+            pen: false,
             mcp,
         };
         app.select_clip(0, 0);
@@ -404,6 +410,8 @@ impl App {
                 Key::M => self.metronome.toggle(),
                 Key::F1 => self.show_help = !self.show_help,
                 Key::Delete | Key::Backspace => self.delete_selected(),
+                Key::P if !modifiers.command => self.toggle_pen(),
+                Key::Escape => self.pen = false,
                 Key::B if !modifiers.command => self.split_at_playhead(),
                 Key::OpenBracket => self.trim_start_to_playhead(),
                 Key::CloseBracket => self.trim_end_to_playhead(),

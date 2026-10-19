@@ -2,6 +2,7 @@
 
 use crate::project::*;
 use crate::theme::*;
+use crate::pianoroll::{size_label, SIZES};
 use crate::{App, DetailTab};
 use eframe::egui::{self, vec2, Color32, RichText, Rounding};
 use std::sync::Arc;
@@ -120,7 +121,56 @@ impl App {
         Ok(())
     }
 
+    /// Cut note `i` of a MIDI clip at `cut` beats (relative to the clip). False if `cut` is not inside the note.
+    pub fn split_note(&mut self, t: usize, c: usize, i: usize, cut: f64) -> bool {
+        let Some(n) = self.notes_ref(t, c).and_then(|v| v.get(i)).cloned() else { return false };
+        if cut <= n.start + 0.01 || cut >= n.start + n.len - 0.01 {
+            return false;
+        }
+        self.checkpoint();
+        if let Some(v) = self.notes_mut(t, c) {
+            v[i].len = cut - n.start;
+            let mut right = n.clone();
+            right.start = cut;
+            right.len = n.start + n.len - cut;
+            v.push(right);
+        }
+        self.push();
+        true
+    }
+
+    /// Multiply the time of every note of the selected MIDI clip (0.5 = compress, 2.0 = stretch).
+    pub fn time_scale_clip(&mut self, f: f64) {
+        let Some((t, c)) = self.sel_clip else { return };
+        if self.notes_ref(t, c).is_none() {
+            self.status = "Select a MIDI clip first.".into();
+            return;
+        }
+        self.checkpoint();
+        if let Some(v) = self.notes_mut(t, c) {
+            for n in v.iter_mut() {
+                n.start *= f;
+                n.len *= f;
+            }
+        }
+        if let Some(cl) = self.project.tracks.get_mut(t).and_then(|tr| tr.clips.get_mut(c)) {
+            cl.len = (cl.len * f).max(0.25);
+        }
+        self.push();
+        self.status = if f < 1.0 { "Clip compressed.".into() } else { "Clip stretched.".into() };
+    }
+
     pub fn split_at_playhead(&mut self) {
+        // a selected note under the playhead is cut first
+        if let (Some((t, c)), Some(i)) = (self.sel_clip, self.sel_note) {
+            let cut = self.project.tracks.get(t).and_then(|tr| tr.clips.get(c)).map(|cl| self.pos_beats - cl.start);
+            if let Some(cut) = cut {
+                if self.split_note(t, c, i, cut) {
+                    self.status = "Note cut at the playhead.".into();
+                    return;
+                }
+            }
+        }
         self.status = match self.sel_clip {
             None => "Select a clip first.".into(),
             Some((t, c)) => match self.split_clip_at(t, c, self.pos_beats) {
@@ -261,7 +311,16 @@ impl App {
         };
     }
 
-    // ---------- bottom panel: tabs + edit toolbar ----------
+    pub fn toggle_pen(&mut self) {
+        self.pen = !self.pen;
+        self.status = if self.pen {
+            "Pen on: click or drag in the piano roll to draw notes. Pick Grid / Size, or just drag. P or Esc to leave.".into()
+        } else {
+            "Pen off.".into()
+        };
+    }
+
+    // ---------- bottom panel: tabs + pen options ----------
 
     pub fn ui_detail(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
@@ -269,6 +328,7 @@ impl App {
         let soft = Color32::from_rgb(240, 240, 245);
         let has_clip = self.sel_clip.is_some();
         let can_paste = self.clipboard.is_some();
+        let audio = self.sel_is_audio();
         let midi_len = self.sel_clip.and_then(|(t, c)| {
             let clip = self.project.tracks.get(t)?.clips.get(c)?;
             if let ClipKind::Midi(_) = &clip.kind {
@@ -277,6 +337,7 @@ impl App {
                 None
             }
         });
+        let is_midi = midi_len.is_some();
 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
@@ -295,43 +356,91 @@ impl App {
             if chip(ui, "Mixer & Effects", self.detail == DetailTab::Mixer) {
                 self.detail = DetailTab::Mixer;
             }
-            ui.separator();
+            ui.add_space(6.0);
+            if pen_button(ui, self.pen) {
+                self.toggle_pen();
+            }
 
-            let btn = |ui: &mut egui::Ui, label: &str, enabled: bool, tip: &str| -> bool {
-                let b = egui::Button::new(RichText::new(label).size(12.0)).rounding(Rounding::same(8.0)).min_size(vec2(0.0, 22.0));
-                ui.add_enabled(enabled, b).on_hover_text(tip).clicked()
-            };
-            if btn(ui, "Split", has_clip, "Split the clip at the playhead (B)") {
-                self.split_at_playhead();
-            }
-            if btn(ui, "Trim start", has_clip, "Remove everything before the playhead ( [ )") {
-                self.trim_start_to_playhead();
-            }
-            if btn(ui, "Trim end", has_clip, "Remove everything after the playhead ( ] )") {
-                self.trim_end_to_playhead();
-            }
-            ui.separator();
-            if btn(ui, "Cut", has_clip, "Ctrl+X") {
-                self.cut_selection();
-            }
-            if btn(ui, "Copy", has_clip, "Ctrl+C") {
-                self.copy_selection();
-            }
-            if btn(ui, "Paste", can_paste, "Paste at the playhead (Ctrl+V)") {
-                self.paste_clipboard();
-            }
-            if btn(ui, "Delete", has_clip, "Delete selected note or clip (Del)") {
-                self.delete_selected();
+            if self.pen {
+                // options only appear while the pen is active
+                ui.add_space(6.0);
+                ui.label(RichText::new("Grid").size(11.5).color(GREY));
+                egui::ComboBox::new("pen_grid", "").width(62.0).selected_text(size_label(self.grid)).show_ui(ui, |ui| {
+                    for (lab, v) in SIZES {
+                        ui.selectable_value(&mut self.grid, v, lab);
+                    }
+                });
+                ui.label(RichText::new("Size").size(11.5).color(GREY));
+                let before = self.last_len;
+                egui::ComboBox::new("pen_size", "").width(62.0).selected_text(size_label(self.last_len)).show_ui(ui, |ui| {
+                    for (lab, v) in SIZES {
+                        ui.selectable_value(&mut self.last_len, v, lab);
+                    }
+                });
+                if (self.last_len - before).abs() > 1e-9 {
+                    // the chosen size also applies to the selected note
+                    if let (Some((t, c)), Some(i)) = (self.sel_clip, self.sel_note) {
+                        let v = self.last_len;
+                        self.checkpoint();
+                        if let Some(n) = self.notes_mut(t, c).and_then(|x| x.get_mut(i)) {
+                            n.len = v;
+                        }
+                        self.fit_clip(t, c);
+                        self.push();
+                    }
+                }
+                ui.menu_button("Clip", |ui| {
+                    if menu_item(ui, "Split at playhead", "B", has_clip) {
+                        self.split_at_playhead();
+                    }
+                    if menu_item(ui, "Trim start to playhead", "[", has_clip) {
+                        self.trim_start_to_playhead();
+                    }
+                    if menu_item(ui, "Trim end to playhead", "]", has_clip) {
+                        self.trim_end_to_playhead();
+                    }
+                    ui.separator();
+                    if menu_item(ui, "Compress ½", "", is_midi) {
+                        self.time_scale_clip(0.5);
+                    }
+                    if menu_item(ui, "Stretch ×2", "", is_midi) {
+                        self.time_scale_clip(2.0);
+                    }
+                    ui.separator();
+                    if menu_item(ui, "Cut", "Ctrl+X", has_clip) {
+                        self.cut_selection();
+                    }
+                    if menu_item(ui, "Copy", "Ctrl+C", has_clip) {
+                        self.copy_selection();
+                    }
+                    if menu_item(ui, "Paste", "Ctrl+V", can_paste) {
+                        self.paste_clipboard();
+                    }
+                    if menu_item(ui, "Delete", "Del", has_clip) {
+                        self.delete_selected();
+                    }
+                    ui.separator();
+                    if menu_item(ui, "Normalize audio", "", audio) {
+                        self.audio_process(AudioOp::Normalize);
+                    }
+                    if menu_item(ui, "Reverse audio", "", audio) {
+                        self.audio_process(AudioOp::Reverse);
+                    }
+                });
+            } else {
+                ui.label(RichText::new("Click the pen to edit").size(11.5).color(GREY));
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let (Some((t, c)), Some(mut len)) = (self.sel_clip, midi_len) {
-                    let r = ui.add(egui::DragValue::new(&mut len).range(0.25..=1024.0).speed(0.25).suffix(" beats"));
-                    ui.label(RichText::new("Clip length").size(11.5).color(GREY));
-                    if r.changed() {
-                        self.edit_checkpoint(&ctx);
-                        self.project.tracks[t].clips[c].len = len;
-                        self.push();
+                if self.pen {
+                    if let (Some((t, c)), Some(mut len)) = (self.sel_clip, midi_len) {
+                        let r = ui.add(egui::DragValue::new(&mut len).range(0.25..=1024.0).speed(0.25).suffix(" beats"));
+                        ui.label(RichText::new("Clip length").size(11.5).color(GREY));
+                        if r.changed() {
+                            self.edit_checkpoint(&ctx);
+                            self.project.tracks[t].clips[c].len = len;
+                            self.push();
+                        }
                     }
                 }
             });
@@ -342,4 +451,41 @@ impl App {
             DetailTab::Mixer => self.ui_fx(ui),
         }
     }
+}
+
+/// Menu entry with an optional shortcut hint; closes the menu when clicked.
+fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str, enabled: bool) -> bool {
+    let mut b = egui::Button::new(label);
+    if !shortcut.is_empty() {
+        b = b.shortcut_text(shortcut);
+    }
+    let clicked = ui.add_enabled(enabled, b).clicked();
+    if clicked {
+        ui.close_menu();
+    }
+    clicked
+}
+
+/// Pen icon drawn by hand (no font glyph needed). Returns true when clicked.
+pub fn pen_button(ui: &mut egui::Ui, active: bool) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(vec2(40.0, 24.0), egui::Sense::click());
+    let resp = resp.on_hover_text("Pen: draw and edit (P). Click again or press Esc to leave.");
+    let bg = if active {
+        ACCENT
+    } else if resp.hovered() {
+        Color32::from_rgb(228, 228, 234)
+    } else {
+        Color32::from_rgb(240, 240, 245)
+    };
+    let fg = if active { Color32::WHITE } else { INK };
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 12.0, bg);
+    let c = rect.center();
+    let d = vec2(1.0, -1.0).normalized();
+    let n = vec2(1.0, 1.0).normalized();
+    let tip = c - d * 6.5;
+    let body = vec![tip, tip + d * 4.0 + n * 2.6, tip + d * 13.0 + n * 2.6, tip + d * 13.0 - n * 2.6, tip + d * 4.0 - n * 2.6];
+    p.add(egui::Shape::closed_line(body, stroke(1.6, fg)));
+    p.line_segment([tip + d * 4.0 + n * 2.6, tip + d * 4.0 - n * 2.6], stroke(1.2, fg));
+    resp.clicked()
 }

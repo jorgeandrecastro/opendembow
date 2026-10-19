@@ -8,6 +8,13 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 const KEYS_W: f32 = 62.0;
 const ROW_H: f32 = 15.0;
 
+/// (label, length in beats): 1/32 ... whole note. Used for the grid and the note size.
+pub const SIZES: [(&str, f64); 6] = [("1/32", 0.125), ("1/16", 0.25), ("1/8", 0.5), ("1/4", 1.0), ("1/2", 2.0), ("1", 4.0)];
+
+pub fn size_label(v: f64) -> &'static str {
+    SIZES.iter().find(|(_, s)| (s - v).abs() < 1e-9).map(|(l, _)| *l).unwrap_or("custom")
+}
+
 impl App {
     pub fn ui_roll(&mut self, ui: &mut egui::Ui) {
         let Some((t, c)) = self.sel_midi() else {
@@ -29,9 +36,16 @@ impl App {
         let col = PALETTE[self.project.tracks[t].color % 8];
 
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
             ui.add_space(14.0);
             ui.label(RichText::new(title).strong());
-            ui.label(RichText::new("Click: add note   Drag: move   Drag right edge: resize   Right-click: delete").size(11.5).color(GREY));
+            let hint = if self.pen {
+                "Pen: click or drag to draw notes · drag a note to move · right-click: delete"
+            } else {
+                "Double-click: add note · drag: move · drag right edge: resize · Ctrl+click: cut"
+            };
+            ui.label(RichText::new(hint).size(11.5).color(GREY));
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.small_button("+").clicked() {
                     self.octave = (self.octave + 1).min(6);
@@ -69,7 +83,7 @@ impl App {
         let gx = |b: f64| grid.left() + ((b - sx) as f32) * ppb;
         let beat_at = |x: f32| ((x - grid.left()) / ppb) as f64 + sx;
         let key_at = |y: f32| top - ((y - grid.top()) / ROW_H).floor() as i32;
-        let g = 0.25f64;
+        let g = self.grid;
         let hit = |notes: &Vec<Note>, p: Pos2| -> Option<(usize, bool)> {
             for (i, n) in notes.iter().enumerate().rev() {
                 let y = grid.top() + (top - n.key as i32) as f32 * ROW_H;
@@ -97,6 +111,20 @@ impl App {
                         };
                         self.audition(t, n.key);
                     }
+                } else if self.pen {
+                    let key = key_at(p.y).clamp(0, 127) as u8;
+                    let start = ((beat_at(p.x) / g).floor() * g).max(0.0);
+                    self.checkpoint();
+                    if let Some(n) = self.notes_mut(t, c) {
+                        n.push(Note { start, len: g, key, vel: 0.8 });
+                    }
+                    if let Some(idx) = self.notes_ref(t, c).map(|v| v.len() - 1) {
+                        self.sel_note = Some(idx);
+                        self.drag = Drag::NoteResize { idx };
+                    }
+                    self.audition(t, key);
+                    self.fit_clip(t, c);
+                    self.push();
                 }
             }
         }
@@ -138,12 +166,25 @@ impl App {
         if gr.drag_stopped() && matches!(self.drag, Drag::NoteMove { .. } | Drag::NoteResize { .. }) {
             self.drag = Drag::None;
         }
-        if gr.clicked() {
+        if gr.hovered() && self.pen {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        }
+        if gr.clicked() || gr.double_clicked() {
             if let Some(p) = gr.interact_pointer_pos() {
+                let ctrl = ui.input(|i| i.modifiers.command);
                 let h = self.notes_ref(t, c).and_then(|n| hit(n, p));
                 match h {
+                    // Ctrl+click on a note: cut it at the (snapped) click position
+                    Some((i, _)) if ctrl => {
+                        let cut = (beat_at(p.x) / g).round() * g;
+                        self.sel_note = Some(i);
+                        if !self.split_note(t, c, i, cut) {
+                            self.status = "Ctrl+click inside a note, away from its edges, to cut it.".into();
+                        }
+                    }
                     Some((i, _)) => self.sel_note = Some(i),
-                    None => {
+                    // empty space: the pen adds with one click, the arrow needs a double-click
+                    None if self.pen || gr.double_clicked() => {
                         let key = key_at(p.y).clamp(0, 127) as u8;
                         let start = ((beat_at(p.x) / g).floor() * g).max(0.0);
                         let len = self.last_len;
@@ -156,6 +197,7 @@ impl App {
                         self.fit_clip(t, c);
                         self.push();
                     }
+                    None => self.sel_note = None,
                 }
             }
         }
@@ -222,13 +264,16 @@ impl App {
         let clip = &self.project.tracks[t].clips[c];
         let b0 = sx.floor() as i64;
         let b1 = (sx + (grid.width() / ppb) as f64).ceil() as i64;
+        // grid subdivisions follow the chosen grid when there is room for them
+        let steps = (1.0 / g).round().max(1.0) as i32;
+        let show_sub = steps > 1 && ppb * (g as f32) >= 12.0;
         for b in b0..=b1 {
             let x = gx(b as f64);
             let bar = b.rem_euclid(4) == 0;
             gp.line_segment([pos2(x, grid.top()), pos2(x, grid.bottom())], stroke(1.0, if bar { Color32::from_rgb(205, 205, 212) } else { Color32::from_rgb(232, 232, 237) }));
-            if ppb >= 70.0 {
-                for q in 1..4 {
-                    let xq = gx(b as f64 + q as f64 * 0.25);
+            if show_sub {
+                for q in 1..steps {
+                    let xq = gx(b as f64 + q as f64 * g);
                     gp.line_segment([pos2(xq, grid.top()), pos2(xq, grid.bottom())], stroke(1.0, Color32::from_rgb(243, 243, 246)));
                 }
             }
