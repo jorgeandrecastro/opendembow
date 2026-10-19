@@ -7,6 +7,7 @@ mod engine;
 mod files;
 mod instruments;
 mod keyboard;
+mod metronome;
 mod pianoroll;
 mod project;
 mod project_io;
@@ -70,6 +71,7 @@ struct App {
     playing: bool,
     pos_beats: f64,
     meters: Vec<f32>,
+    metronome: metronome::Metronome,
 }
 
 fn piano_key(k: Key) -> Option<u8> {
@@ -131,6 +133,7 @@ impl App {
             playing: false,
             pos_beats: 0.0,
             meters: Vec::new(),
+            metronome: metronome::Metronome::new(),
         };
         app.select_clip(0, 0);
         app
@@ -347,6 +350,7 @@ impl App {
             match key {
                 Key::Space => self.engine.toggle_play(),
                 Key::Home => self.rewind(),
+                Key::M => self.metronome.toggle(),
                 Key::F1 => self.show_help = !self.show_help,
                 Key::Delete | Key::Backspace => self.delete_selected(),
                 Key::Z if modifiers.command => {
@@ -370,6 +374,7 @@ impl eframe::App for App {
         let (pos, playing, meters, _master) = self.engine.status();
         self.playing = playing;
         self.pos_beats = pos as f64 / self.project.sr as f64 * self.project.bpm / 60.0;
+        self.metronome.update(playing, self.pos_beats, self.project.bpm);
         let active = playing || meters.iter().any(|m| *m > 0.002);
         self.meters = meters;
         if active || !self.down.is_empty() {

@@ -271,6 +271,9 @@ impl App {
                 self.push();
                 self.engine.set_pos(b, bpm, self.project.sr);
             }
+            ui.add_space(6.0);
+            self.metronome.ui_button(ui, self.pos_beats, self.playing);
+            ui.add_space(6.0);
             let b = self.pos_beats.max(0.0);
             let txt = format!("{}.{}.{}", (b / 4.0) as u32 + 1, (b % 4.0) as u32 + 1, ((b % 1.0) * 4.0) as u32 + 1);
             ui.label(RichText::new(txt).monospace().size(16.0));
@@ -500,6 +503,7 @@ impl App {
                 let rows = [
                     ("Space", "Play / pause"),
                     ("Home", "Rewind to start"),
+                    ("M", "Metronome on / off (right-click it for options)"),
                     ("A W S E D F T G Y H U J K O L", "Play notes (piano layout)"),
                     ("Z / X", "Keyboard octave down / up"),
                     ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"),
