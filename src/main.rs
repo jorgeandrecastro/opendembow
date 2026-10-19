@@ -1,12 +1,15 @@
-//! OpenDembow 0.4 - a modern, elegant DAW.
+//! OpenDembow 0.5 - a modern, elegant DAW.
 
 mod arrangement;
 mod audio_io;
 mod chrome;
+mod edit;
+mod effects;
 mod engine;
 mod files;
 mod instruments;
 mod keyboard;
+mod mcp;
 mod metronome;
 mod pianoroll;
 mod project;
@@ -38,6 +41,13 @@ enum Drag {
     Clip { t: usize, c: usize, grab: f64 },
     NoteMove { idx: usize, grab_beat: f64, grab_key: i32 },
     NoteResize { idx: usize },
+}
+
+/// Tab shown in the bottom panel.
+#[derive(Clone, Copy, PartialEq)]
+enum DetailTab {
+    Roll,
+    Mixer,
 }
 
 struct App {
@@ -72,6 +82,10 @@ struct App {
     pos_beats: f64,
     meters: Vec<f32>,
     metronome: metronome::Metronome,
+    // 0.5
+    detail: DetailTab,
+    clipboard: Option<edit::Clipboard>,
+    mcp: Option<std::sync::mpsc::Receiver<mcp::Call>>,
 }
 
 fn piano_key(k: Key) -> Option<u8> {
@@ -100,10 +114,14 @@ impl App {
         theme::apply(&cc.egui_ctx);
         let project = Project::demo(engine::device_sr());
         let engine = Engine::new(project.clone());
-        let status = engine
-            .error
-            .clone()
-            .unwrap_or_else(|| "Welcome to OpenDembow. Press Space to play, or press ? for help.".into());
+        let mcp = if std::env::args().any(|a| a == "--mcp") { Some(mcp::start(cc.egui_ctx.clone())) } else { None };
+        let status = engine.error.clone().unwrap_or_else(|| {
+            if mcp.is_some() {
+                "MCP server active (stdio). An AI assistant can now control this project.".into()
+            } else {
+                "Welcome to OpenDembow. Press Space to play, or press ? for help.".into()
+            }
+        });
         let mut app = Self {
             project,
             engine,
@@ -134,6 +152,9 @@ impl App {
             pos_beats: 0.0,
             meters: Vec::new(),
             metronome: metronome::Metronome::new(),
+            detail: DetailTab::Roll,
+            clipboard: None,
+            mcp,
         };
         app.select_clip(0, 0);
         app
@@ -327,8 +348,38 @@ impl App {
         if let Some(p) = dropped.into_iter().find_map(|f| f.path) {
             self.import_audio(p);
         }
+        // typing in a text field (search box, number entry) must not trigger shortcuts
+        if ctx.wants_keyboard_input() {
+            return;
+        }
         let events = ctx.input(|i| i.events.clone());
+        // Ctrl+C/X/V can arrive both as Key and as Copy/Cut/Paste events: handle one per frame
+        let mut clip_done = false;
         for e in events {
+            match &e {
+                egui::Event::Copy => {
+                    if !clip_done {
+                        self.copy_selection();
+                        clip_done = true;
+                    }
+                    continue;
+                }
+                egui::Event::Cut => {
+                    if !clip_done {
+                        self.cut_selection();
+                        clip_done = true;
+                    }
+                    continue;
+                }
+                egui::Event::Paste(_) => {
+                    if !clip_done {
+                        self.paste_clipboard();
+                        clip_done = true;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
             let egui::Event::Key { key, pressed, repeat, modifiers, .. } = e else { continue };
             if repeat {
                 continue;
@@ -353,6 +404,27 @@ impl App {
                 Key::M => self.metronome.toggle(),
                 Key::F1 => self.show_help = !self.show_help,
                 Key::Delete | Key::Backspace => self.delete_selected(),
+                Key::B if !modifiers.command => self.split_at_playhead(),
+                Key::OpenBracket => self.trim_start_to_playhead(),
+                Key::CloseBracket => self.trim_end_to_playhead(),
+                Key::C if modifiers.command => {
+                    if !clip_done {
+                        self.copy_selection();
+                        clip_done = true;
+                    }
+                }
+                Key::X if modifiers.command => {
+                    if !clip_done {
+                        self.cut_selection();
+                        clip_done = true;
+                    }
+                }
+                Key::V if modifiers.command => {
+                    if !clip_done {
+                        self.paste_clipboard();
+                        clip_done = true;
+                    }
+                }
                 Key::Z if modifiers.command => {
                     if modifiers.shift { self.redo() } else { self.undo() }
                 }
@@ -380,6 +452,10 @@ impl eframe::App for App {
         if active || !self.down.is_empty() {
             ctx.request_repaint();
         }
+        self.mcp_poll();
+        if self.mcp.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(60));
+        }
         self.handle_input(ctx);
 
         let bar = |y: f32| egui::Frame::none().fill(Color32::WHITE).inner_margin(egui::Margin::symmetric(18.0, y));
@@ -401,9 +477,9 @@ impl eframe::App for App {
             .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 14.0)))
             .show(ctx, |ui| self.ui_browser(ui));
         egui::TopBottomPanel::bottom("detail")
-            .exact_height(270.0)
+            .exact_height(285.0)
             .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 0.0, bottom: 10.0 }))
-            .show(ctx, |ui| self.ui_roll(ui));
+            .show(ctx, |ui| self.ui_detail(ui));
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 14.0, bottom: 10.0 }))
             .show(ctx, |ui| self.ui_arrangement(ui));

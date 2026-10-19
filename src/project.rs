@@ -1,5 +1,6 @@
 //! The song: tracks, clips, notes.
 
+use crate::effects::FxSettings;
 use crate::instruments::Instrument;
 use std::sync::Arc;
 
@@ -53,11 +54,23 @@ pub struct Track {
     pub mute: bool,
     pub solo: bool,
     pub clips: Vec<Clip>,
+    /// EQ, compressor, reverb, delay.
+    pub fx: FxSettings,
 }
 
 impl Track {
     pub fn new(name: &str, kind: TrackKind, color: usize) -> Self {
-        Self { name: name.into(), kind, color, volume: 0.8, pan: 0.0, mute: false, solo: false, clips: Vec::new() }
+        Self {
+            name: name.into(),
+            kind,
+            color,
+            volume: 0.8,
+            pan: 0.0,
+            mute: false,
+            solo: false,
+            clips: Vec::new(),
+            fx: FxSettings::default(),
+        }
     }
 }
 

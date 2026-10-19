@@ -1,9 +1,10 @@
 //! Application chrome: icon, menu bar, transport bar, instrument browser, help window.
 
+use crate::edit::AudioOp;
 use crate::instruments::{Category, Instrument};
 use crate::project::TrackKind;
 use crate::theme::*;
-use crate::App;
+use crate::{App, DetailTab};
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, Rounding, Sense, Shape};
 use std::f32::consts::TAU;
 
@@ -200,12 +201,48 @@ impl App {
                     ui.close_menu();
                 }
                 ui.separator();
-                if ui.add_enabled(self.sel_clip.is_some(), egui::Button::new("Duplicate Clip").shortcut_text("Ctrl+D")).clicked() {
+                let has_clip = self.sel_clip.is_some();
+                if ui.add_enabled(has_clip, egui::Button::new("Cut").shortcut_text("Ctrl+X")).clicked() {
+                    self.cut_selection();
+                    ui.close_menu();
+                }
+                if ui.add_enabled(has_clip, egui::Button::new("Copy").shortcut_text("Ctrl+C")).clicked() {
+                    self.copy_selection();
+                    ui.close_menu();
+                }
+                if ui.add_enabled(self.clipboard.is_some(), egui::Button::new("Paste").shortcut_text("Ctrl+V")).clicked() {
+                    self.paste_clipboard();
+                    ui.close_menu();
+                }
+                if ui.add_enabled(has_clip, egui::Button::new("Duplicate Clip").shortcut_text("Ctrl+D")).clicked() {
                     self.duplicate_clip();
                     ui.close_menu();
                 }
-                if ui.add_enabled(self.sel_clip.is_some(), egui::Button::new("Delete Selection").shortcut_text("Del")).clicked() {
+                if ui.add_enabled(has_clip, egui::Button::new("Delete Selection").shortcut_text("Del")).clicked() {
                     self.delete_selected();
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.add_enabled(has_clip, egui::Button::new("Split at Playhead").shortcut_text("B")).clicked() {
+                    self.split_at_playhead();
+                    ui.close_menu();
+                }
+                if ui.add_enabled(has_clip, egui::Button::new("Trim Start to Playhead").shortcut_text("[")).clicked() {
+                    self.trim_start_to_playhead();
+                    ui.close_menu();
+                }
+                if ui.add_enabled(has_clip, egui::Button::new("Trim End to Playhead").shortcut_text("]")).clicked() {
+                    self.trim_end_to_playhead();
+                    ui.close_menu();
+                }
+                ui.separator();
+                let audio = self.sel_is_audio();
+                if ui.add_enabled(audio, egui::Button::new("Normalize Audio")).clicked() {
+                    self.audio_process(AudioOp::Normalize);
+                    ui.close_menu();
+                }
+                if ui.add_enabled(audio, egui::Button::new("Reverse Audio")).clicked() {
+                    self.audio_process(AudioOp::Reverse);
                     ui.close_menu();
                 }
             });
@@ -224,6 +261,11 @@ impl App {
                 });
                 if ui.button("Add Audio Track (WAV)…").clicked() {
                     self.import_dialog();
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.button("Show Mixer & Effects").clicked() {
+                    self.detail = DetailTab::Mixer;
                     ui.close_menu();
                 }
                 ui.separator();
@@ -249,7 +291,7 @@ impl App {
     pub fn ui_top(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("OpenDembow").size(18.0).strong());
-            ui.label(RichText::new("0.4").color(GREY));
+            ui.label(RichText::new("0.5").color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
@@ -299,12 +341,7 @@ impl App {
                 if ui.button("Save").clicked() {
                     self.save_project(false);
                 }
-                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new("↷")).clicked() {
-                    self.redo();
-                }
-                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new("↶")).clicked() {
-                    self.undo();
-                }
+                // Undo / redo live in the Edit menu and on Ctrl+Z / Ctrl+Shift+Z.
             });
         });
     }
@@ -489,7 +526,7 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(500.0)
+            .default_width(520.0)
             .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.label(RichText::new("Quick start").size(15.0).strong());
@@ -497,7 +534,9 @@ impl App {
                 ui.label("2. Double-click an empty lane to create a clip, then add notes in the piano roll.");
                 ui.label("3. Play any instrument live with the on-screen keyboard or your computer keys.");
                 ui.label("4. Press Space to play. Drag clips to move them. Use × on a track to delete it.");
-                ui.label("5. File > Export to bounce your song to WAV, stems or MIDI.");
+                ui.label("5. Mixer & Effects tab: volume, pan, EQ, compressor, reverb, delay per track.");
+                ui.label("6. Edit clips: Split (B), trim to playhead ( [ and ] ), cut / copy / paste.");
+                ui.label("7. File > Export to bounce your song to WAV, stems or MIDI.");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
                 let rows = [
@@ -507,6 +546,9 @@ impl App {
                     ("A W S E D F T G Y H U J K O L", "Play notes (piano layout)"),
                     ("Z / X", "Keyboard octave down / up"),
                     ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"),
+                    ("Ctrl+C / Ctrl+X / Ctrl+V", "Copy / cut / paste clip or note (at playhead)"),
+                    ("B", "Split selected clip at the playhead"),
+                    ("[  /  ]", "Trim clip start / end to the playhead"),
                     ("Ctrl+D", "Duplicate selected clip"),
                     ("Delete", "Delete selected note or clip"),
                     ("Right-click note", "Delete note"),
@@ -524,7 +566,8 @@ impl App {
                     }
                 });
                 ui.add_space(10.0);
-                ui.label(RichText::new("OpenDembow 0.4 - made with Rust, egui and cpal.").color(GREY).size(12.0));
+                ui.label(RichText::new("Tip: start with `opendembow --mcp` to let an AI assistant (MCP) control the project.").size(12.0));
+                ui.label(RichText::new("OpenDembow 0.5 - made with Rust, egui and cpal.").color(GREY).size(12.0));
             });
         self.show_help = open;
     }
