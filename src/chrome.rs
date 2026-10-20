@@ -27,6 +27,7 @@ fn short_name(c: Category) -> &'static str {
         Category::Pads => "Pads",
         Category::Mallets => "Mallets",
         Category::Brass => "Brass",
+        Category::Drums => "Drums",
     }
 }
 
@@ -86,6 +87,13 @@ fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
                 pos2(c.x - w / 2.0, c.y + h * 0.14),
             ];
             p.add(Shape::closed_line(pts, st));
+        }
+        Category::Drums => {
+            // a drum body with two crossed sticks above it
+            let body = Rect::from_center_size(pos2(c.x, c.y + h * 0.18), vec2(w, h * 0.62));
+            p.rect_stroke(body, 4.0, st);
+            p.line_segment([pos2(c.x - w * 0.35, c.y - h * 0.55), pos2(c.x + w * 0.05, c.y - h * 0.02)], st);
+            p.line_segment([pos2(c.x + w * 0.35, c.y - h * 0.55), pos2(c.x - w * 0.05, c.y - h * 0.02)], st);
         }
     }
 }
@@ -291,7 +299,7 @@ impl App {
     pub fn ui_top(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("OpenDembow").size(18.0).strong());
-            ui.label(RichText::new("0.5").color(GREY));
+            ui.label(RichText::new("0.6").color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
@@ -537,6 +545,7 @@ impl App {
                 ui.label("5. Mixer & Effects tab: volume, pan, EQ, compressor, reverb, delay per track.");
                 ui.label("6. Edit clips: Split (B), trim to playhead ( [ and ] ), cut / copy / paste.");
                 ui.label("7. File > Export to bounce your song to WAV, stems or MIDI.");
+                ui.label("8. Drums: pick Drum Kit or 808 Kit. C2 = kick, D2 = snare, E2 = clap, F#2 = closed hat, A#2 = open hat.");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
                 let rows = [
@@ -573,7 +582,7 @@ impl App {
                 });
                 ui.add_space(10.0);
                 ui.label(RichText::new("Tip: start with `opendembow --mcp` to let an AI assistant (MCP) control the project.").size(12.0));
-                ui.label(RichText::new("OpenDembow 0.5 - made with Rust, egui and cpal.").color(GREY).size(12.0));
+                ui.label(RichText::new("OpenDembow 0.6 - made with Rust, egui and cpal.").color(GREY).size(12.0));
             });
         self.show_help = open;
     }

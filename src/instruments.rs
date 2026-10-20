@@ -1,4 +1,5 @@
-//! Built-in instruments: 24 synthesized voices grouped in categories, no samples required.
+//! Built-in instruments: 30 synthesized voices grouped in categories, no samples required.
+//! Drum kits live in `drums.rs`, the 0.6 melodic additions in `extra_voices.rs`.
 
 use std::f32::consts::TAU;
 
@@ -13,10 +14,11 @@ pub enum Category {
     Pads,
     Mallets,
     Brass,
+    Drums,
 }
 
 impl Category {
-    pub const ALL: [Category; 8] = [
+    pub const ALL: [Category; 9] = [
         Category::Keys,
         Category::Organs,
         Category::Leads,
@@ -25,6 +27,7 @@ impl Category {
         Category::Pads,
         Category::Mallets,
         Category::Brass,
+        Category::Drums,
     ];
 
     pub fn name(self) -> &'static str {
@@ -37,6 +40,7 @@ impl Category {
             Category::Pads => "Pads & Strings",
             Category::Mallets => "Mallets & Bells",
             Category::Brass => "Brass & Winds",
+            Category::Drums => "Drums & Percussion",
         }
     }
 }
@@ -70,10 +74,17 @@ pub enum Instrument {
     Vibraphone,
     Brass,
     Flute,
+    // --- new in 0.6 ---
+    DrumKit,
+    Kit808,
+    Bass808,
+    ElectricBass,
+    ElectricGuitar,
+    SynthPluck,
 }
 
 impl Instrument {
-    pub const ALL: [Instrument; 24] = [
+    pub const ALL: [Instrument; 30] = [
         Instrument::Piano,
         Instrument::ElectricPiano,
         Instrument::Organ,
@@ -98,6 +109,12 @@ impl Instrument {
         Instrument::Vibraphone,
         Instrument::Brass,
         Instrument::Flute,
+        Instrument::DrumKit,
+        Instrument::Kit808,
+        Instrument::Bass808,
+        Instrument::ElectricBass,
+        Instrument::ElectricGuitar,
+        Instrument::SynthPluck,
     ];
 
     pub fn name(self) -> &'static str {
@@ -126,6 +143,12 @@ impl Instrument {
             Instrument::Vibraphone => "Vibraphone",
             Instrument::Brass => "Brass Section",
             Instrument::Flute => "Flute",
+            Instrument::DrumKit => "Drum Kit",
+            Instrument::Kit808 => "808 Kit",
+            Instrument::Bass808 => "808 Bass",
+            Instrument::ElectricBass => "Fingered Bass",
+            Instrument::ElectricGuitar => "Electric Guitar",
+            Instrument::SynthPluck => "Synth Pluck",
         }
     }
 
@@ -155,6 +178,12 @@ impl Instrument {
             Instrument::Vibraphone => "Metal bars with tremolo",
             Instrument::Brass => "Swelling brass stack",
             Instrument::Flute => "Breathy, soft wind",
+            Instrument::DrumKit => "Acoustic-style kit, GM note map",
+            Instrument::Kit808 => "Electronic kit, long 808 kick",
+            Instrument::Bass808 => "Booming saturated sub",
+            Instrument::ElectricBass => "Round fingered bass",
+            Instrument::ElectricGuitar => "Overdriven plucked guitar",
+            Instrument::SynthPluck => "Short, bright saw pluck",
         }
     }
 
@@ -163,11 +192,16 @@ impl Instrument {
             Instrument::Piano | Instrument::ElectricPiano | Instrument::Clavinet | Instrument::Harpsichord => Category::Keys,
             Instrument::Organ | Instrument::ChurchOrgan => Category::Organs,
             Instrument::SynthLead | Instrument::SquareLead | Instrument::SuperSaw => Category::Leads,
-            Instrument::SynthBass | Instrument::SubBass | Instrument::AcidBass => Category::Basses,
-            Instrument::Pluck | Instrument::Guitar | Instrument::Harp => Category::Plucked,
+            Instrument::SynthBass | Instrument::SubBass | Instrument::AcidBass | Instrument::Bass808 | Instrument::ElectricBass => {
+                Category::Basses
+            }
+            Instrument::Pluck | Instrument::Guitar | Instrument::Harp | Instrument::ElectricGuitar | Instrument::SynthPluck => {
+                Category::Plucked
+            }
             Instrument::Strings | Instrument::WarmPad | Instrument::Choir => Category::Pads,
             Instrument::Bell | Instrument::Marimba | Instrument::MusicBox | Instrument::Vibraphone => Category::Mallets,
             Instrument::Brass | Instrument::Flute => Category::Brass,
+            Instrument::DrumKit | Instrument::Kit808 => Category::Drums,
         }
     }
 
@@ -197,6 +231,12 @@ impl Instrument {
             Instrument::Vibraphone => 5.0,
             Instrument::Brass => 12.0,
             Instrument::Flute => 10.0,
+            // Drums are one-shots: they end by themselves, note-off must not cut them.
+            Instrument::DrumKit | Instrument::Kit808 => 0.0,
+            Instrument::Bass808 => 18.0,
+            Instrument::ElectricBass => 22.0,
+            Instrument::ElectricGuitar => 14.0,
+            Instrument::SynthPluck => 20.0,
         }
     }
 }
@@ -213,11 +253,11 @@ fn polyblep(t: f32, dt: f32) -> f32 {
     }
 }
 
-fn saw(ph: f32, dp: f32) -> f32 {
+pub(crate) fn saw(ph: f32, dp: f32) -> f32 {
     2.0 * ph - 1.0 - polyblep(ph, dp)
 }
 
-fn square(ph: f32, dp: f32) -> f32 {
+pub(crate) fn square(ph: f32, dp: f32) -> f32 {
     let s = if ph < 0.5 { 1.0 } else { -1.0 };
     s + polyblep(ph, dp) - polyblep((ph + 0.5).fract(), dp)
 }
@@ -237,6 +277,9 @@ pub struct Voice {
     ph: [f32; 5],
     lp: f32,
     lp2: f32,
+    /// Noise generator and filter memories (drums).
+    rng: u32,
+    st: [f32; 4],
 }
 
 impl Voice {
@@ -255,6 +298,8 @@ impl Voice {
             ph: [0.0; 5],
             lp: 0.0,
             lp2: 0.0,
+            rng: 0x9E37_79B9 ^ (key as u32 + 1).wrapping_mul(0x85EB_CA6B),
+            st: [0.0; 4],
         }
     }
 
@@ -528,6 +573,19 @@ impl Voice {
                 let tone = (a + vib).sin() + 0.15 * (2.0 * (a + vib)).sin() + 0.05 * (3.0 * (a + vib)).sin();
                 let noise = ((t * 12345.678).sin() * 43758.5453).fract() - 0.5;
                 (tone + 0.06 * noise, 0.08, 0.3)
+            }
+
+            // ------------------------------------------------ Drums (0.6, see drums.rs)
+            Instrument::DrumKit | Instrument::Kit808 => {
+                match crate::drums::hit(self.inst == Instrument::Kit808, self.key, t, dt, &mut self.rng, &mut self.st) {
+                    Some(x) => (x, 0.0005, 0.6),
+                    None => return None, // a drum hit ends by itself: no 12 s voice
+                }
+            }
+
+            // ------------------------------------------------ Extra voices (0.6, see extra_voices.rs)
+            Instrument::Bass808 | Instrument::ElectricBass | Instrument::ElectricGuitar | Instrument::SynthPluck => {
+                crate::extra_voices::voice(self.inst, f, t, dt, &mut self.ph, &mut self.lp, &mut self.lp2)
             }
         };
         let mut g = (t / attack).min(1.0) * self.vel * level;

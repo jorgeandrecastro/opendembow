@@ -35,12 +35,12 @@ fn tools() -> Value {
     let note = json!({ "type": "object", "properties": {
         "start": { "type": "number", "description": "beats from the start of the clip" },
         "length": { "type": "number", "description": "beats" },
-        "key": { "type": "integer", "description": "MIDI note 0-127, 60 = middle C" },
+        "key": { "type": "integer", "description": "MIDI note 0-127, 60 = middle C. On Drum Kit / 808 Kit tracks the key picks the drum: 36 kick, 37 rim, 38 snare, 39 clap, 40 tight snare, 41/43/45/47/48/50 toms, 42 closed hat, 44 pedal hat, 46 open hat, 49/52/55/57 crash, 51/53/59 ride, 54/58 shaker, 56 cowbell (notes outside 36-59 wrap around)" },
         "velocity": { "type": "number", "description": "0.0-1.0, default 0.8" } },
         "required": ["start", "length", "key"] });
     json!([
         tool("get_project", "Tempo, transport state, tracks, clips, mixer and effect settings.", json!({}), &[]),
-        tool("list_instruments", "All built-in instruments with their category.", json!({}), &[]),
+        tool("list_instruments", "All built-in instruments with their category (including the Drum Kit and 808 Kit).", json!({}), &[]),
         tool("get_notes", "Notes of a MIDI clip.", json!({ "track": {"type":"integer"}, "clip": {"type":"integer"} }), &["track", "clip"]),
         tool("set_tempo", "Set the tempo (40-240 BPM).", json!({ "bpm": {"type":"number"} }), &["bpm"]),
         tool("add_track", "Add an instrument track (name from list_instruments, case-insensitive).", json!({ "instrument": {"type":"string"} }), &["instrument"]),
@@ -48,7 +48,7 @@ fn tools() -> Value {
         tool("add_midi_clip", "Create an empty MIDI clip on an instrument track.", json!({
             "track": {"type":"integer"}, "start": {"type":"number","description":"beats on the timeline"},
             "length": {"type":"number","description":"beats, default 4"}, "name": {"type":"string"} }), &["track"]),
-        tool("add_notes", "Add notes to a MIDI clip (the clip grows if needed).", json!({
+        tool("add_notes", "Add notes to a MIDI clip (the clip grows if needed). For drums use the General MIDI drum keys described in the note schema.", json!({
             "track": {"type":"integer"}, "clip": {"type":"integer"}, "notes": {"type":"array","items": note} }), &["track", "clip", "notes"]),
         tool("delete_clip", "Delete a clip.", json!({ "track": {"type":"integer"}, "clip": {"type":"integer"} }), &["track", "clip"]),
         tool("split_clip", "Split a clip at an absolute timeline position (beats).", json!({
@@ -84,7 +84,7 @@ fn serve(tx: Sender<Call>, ctx: eframe::egui::Context) {
             "initialize" => Ok(json!({
                 "protocolVersion": params.get("protocolVersion").and_then(Value::as_str).unwrap_or("2024-11-05"),
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "opendembow", "version": "0.5" }
+                "serverInfo": { "name": "opendembow", "version": "0.6" }
             })),
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": tools() })),

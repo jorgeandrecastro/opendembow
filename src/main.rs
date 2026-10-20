@@ -1,11 +1,13 @@
-//! OpenDembow 0.5 - a modern, elegant DAW.
+//! OpenDembow 0.6 - a modern, elegant DAW.
 
 mod arrangement;
 mod audio_io;
 mod chrome;
+mod drums;
 mod edit;
 mod effects;
 mod engine;
+mod extra_voices;
 mod files;
 mod instruments;
 mod keyboard;

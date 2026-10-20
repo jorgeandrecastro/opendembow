@@ -106,6 +106,24 @@ impl Project {
         piano.clips.push(Clip { name: "Chords".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(keys) });
         let mut b = Track::new("Synth Bass", TrackKind::Instrument(Instrument::SynthBass), 1);
         b.clips.push(Clip { name: "Bass".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(bass) });
-        Project { sr, bpm: 100.0, tracks: vec![piano, b] }
+
+        // Dembow beat: kick on every beat, snares on the 3+3+2 accents, hi-hats on the eighths.
+        let mut beat = Vec::new();
+        for bar in 0..4 {
+            let b0 = bar as f64 * 4.0;
+            for i in 0..4 {
+                beat.push(Note { start: b0 + i as f64, len: 0.2, key: 36, vel: 0.95 });
+            }
+            for s in [0.75, 1.5, 2.75, 3.5] {
+                beat.push(Note { start: b0 + s, len: 0.2, key: 38, vel: 0.85 });
+            }
+            for i in 0..8 {
+                beat.push(Note { start: b0 + i as f64 * 0.5, len: 0.1, key: 42, vel: if i % 2 == 0 { 0.6 } else { 0.4 } });
+            }
+        }
+        let mut drums = Track::new("808 Kit", TrackKind::Instrument(Instrument::Kit808), 2);
+        drums.clips.push(Clip { name: "Dembow".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(beat) });
+
+        Project { sr, bpm: 100.0, tracks: vec![piano, b, drums] }
     }
 }
