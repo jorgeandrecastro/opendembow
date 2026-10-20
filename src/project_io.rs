@@ -1,5 +1,6 @@
 //! Project save / load (plain text + WAV side files) and Standard MIDI File export.
 
+use crate::effects::FxSettings;
 use crate::instruments::Instrument;
 use crate::project::*;
 use std::fmt::Write as _;
@@ -20,6 +21,9 @@ fn write_wav_f32(path: &Path, data: &[f32], sr: u32) -> Result<(), String> {
 }
 
 /// Saves `<name>.dembow`; audio clips are written next to it as `<name>.audioN.wav`.
+///
+/// Effects are stored as `fx<TAB>effect.param<TAB>value` lines right after their `track` line
+/// (only when the track's effects differ from the defaults).
 pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
     let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "project".into());
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
@@ -33,6 +37,11 @@ pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
             TrackKind::Audio => "audio".to_string(),
         };
         let _ = writeln!(out, "track\t{}\t{}\t{}\t{}\t{}\t{}\t{}", kind, t.color, t.volume, t.pan, t.mute as u8, t.solo as u8, clean(&t.name));
+        if t.fx != FxSettings::default() {
+            for (key, v) in t.fx.params() {
+                let _ = writeln!(out, "fx\t{}\t{}", key, v as f32);
+            }
+        }
         for c in &t.clips {
             match &c.kind {
                 ClipKind::Midi(notes) => {
@@ -77,6 +86,15 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
                 t.mute = f[5] == "1";
                 t.solo = f[6] == "1";
                 p.tracks.push(t);
+            }
+            // Effect parameter of the last track. Old projects have no such lines (defaults stay);
+            // unknown names are ignored by `set_param`, values are clamped there.
+            Some("fx") if f.len() >= 3 => {
+                if let (Some(t), Ok(v)) = (p.tracks.last_mut(), f[2].parse::<f64>()) {
+                    if v.is_finite() {
+                        t.fx.set_param(f[1], v);
+                    }
+                }
             }
             Some("clip") if f.len() >= 5 => {
                 if let Some(t) = p.tracks.last_mut() {

@@ -1,5 +1,6 @@
 //! Real-time mixer, audio output and offline bounce.
 
+use crate::effects::FxProcessor;
 use crate::instruments::{Instrument, Voice};
 use crate::project::*;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -29,16 +30,32 @@ pub struct Mixer {
     l: Vec<f32>,
     r: Vec<f32>,
     peaks: Vec<f32>,
+    // Per-track stereo buffers (before volume/pan) and one effect chain per track.
+    tl: Vec<Vec<f32>>,
+    tr: Vec<Vec<f32>>,
+    fx: Vec<FxProcessor>,
+    fx_sr: f32,
 }
 
 impl Mixer {
     pub fn new() -> Self {
-        Mixer { voices: Vec::new(), meters: Vec::new(), master: 0.0, l: Vec::new(), r: Vec::new(), peaks: Vec::new() }
+        Mixer {
+            voices: Vec::new(),
+            meters: Vec::new(),
+            master: 0.0,
+            l: Vec::new(),
+            r: Vec::new(),
+            peaks: Vec::new(),
+            tl: Vec::new(),
+            tr: Vec::new(),
+            fx: Vec::new(),
+            fx_sr: 0.0,
+        }
     }
 
     /// Renders `n` frames starting at sample `pos` into the internal L/R buffers.
     pub fn render(&mut self, p: &Project, pos: usize, playing: bool, n: usize) {
-        let Mixer { voices, meters, master, l, r, peaks } = self;
+        let Mixer { voices, meters, master, l, r, peaks, tl, tr, fx, fx_sr } = self;
         l.clear();
         l.resize(n, 0.0);
         r.clear();
@@ -49,6 +66,27 @@ impl Mixer {
         if meters.len() != count {
             *meters = vec![0.0; count];
         }
+
+        // One FxProcessor per track (all recreated only when the sample rate changes).
+        if *fx_sr != p.sr {
+            fx.clear();
+            *fx_sr = p.sr;
+        }
+        while fx.len() < count {
+            fx.push(FxProcessor::new(p.sr));
+        }
+        fx.truncate(count);
+
+        // Per-track buffers, zeroed.
+        tl.resize_with(count, Vec::new);
+        tr.resize_with(count, Vec::new);
+        tl.truncate(count);
+        tr.truncate(count);
+        for b in tl.iter_mut().chain(tr.iter_mut()) {
+            b.clear();
+            b.resize(n, 0.0);
+        }
+
         let any_solo = p.tracks.iter().any(|t| t.solo);
         let spb = 60.0 / p.bpm * p.sr as f64;
         let dt = 1.0 / p.sr;
@@ -82,9 +120,9 @@ impl Mixer {
                                     let a = pos + i;
                                     if a >= start && a - start < data.len() {
                                         let s = data[a - start];
-                                        l[i] += s * gl;
-                                        r[i] += s * gr;
-                                        peaks[ti] = peaks[ti].max((s * gl).abs().max((s * gr).abs()));
+                                        // Dry signal, no gain: effects come first.
+                                        tl[ti][i] += s;
+                                        tr[ti][i] += s;
                                     }
                                 }
                             }
@@ -95,8 +133,9 @@ impl Mixer {
         }
 
         voices.retain_mut(|v| {
-            let Some(t) = p.tracks.get(v.track) else { return false };
-            let (gl, gr) = gains(t, any_solo);
+            if p.tracks.get(v.track).is_none() {
+                return false;
+            }
             for i in 0..n {
                 if v.delay > 0 {
                     v.delay -= 1;
@@ -111,16 +150,30 @@ impl Mixer {
                 }
                 match v.next(dt) {
                     Some(x) => {
-                        l[i] += x * gl;
-                        r[i] += x * gr;
-                        let y = (x * gl).abs().max((x * gr).abs());
-                        peaks[v.track] = peaks[v.track].max(y);
+                        tl[v.track][i] += x;
+                        tr[v.track][i] += x;
                     }
                     None => return false,
                 }
             }
             true
         });
+
+        // Track effects first, THEN volume/pan/mute/solo, THEN sum into the master bus.
+        for ti in 0..count {
+            let t = &p.tracks[ti];
+            fx[ti].process_block(&t.fx, &mut tl[ti], &mut tr[ti]);
+            let (gl, gr) = gains(t, any_solo);
+            let mut pk = 0.0f32;
+            for i in 0..n {
+                let a = tl[ti][i] * gl;
+                let b = tr[ti][i] * gr;
+                l[i] += a;
+                r[i] += b;
+                pk = pk.max(a.abs()).max(b.abs());
+            }
+            peaks[ti] = pk;
+        }
 
         for (m, pk) in meters.iter_mut().zip(peaks.iter()) {
             *m = (*m * 0.88).max(*pk);
