@@ -121,7 +121,7 @@ impl Project {
                 beat.push(Note { start: b0 + i as f64 * 0.5, len: 0.1, key: 42, vel: if i % 2 == 0 { 0.6 } else { 0.4 } });
             }
         }
-        let mut drums = Track::new("808 Kit", TrackKind::Instrument(Instrument::Kit808), 2);
+        let mut drums = Track::new("Reggaeton Kit", TrackKind::Instrument(Instrument::ReggaetonKit), 2);
         drums.clips.push(Clip { name: "Dembow".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(beat) });
 
         Project { sr, bpm: 100.0, tracks: vec![piano, b, drums] }

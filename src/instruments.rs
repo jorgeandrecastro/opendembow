@@ -1,5 +1,6 @@
-//! Built-in instruments: 30 synthesized voices grouped in categories, no samples required.
-//! Drum kits live in `drums.rs`, the 0.6 melodic additions in `extra_voices.rs`.
+//! Built-in instruments: 33 synthesized voices grouped in categories, no samples required.
+//! Drum kits live in `drums.rs` and `drums_urban.rs`, percussion in `latin.rs`,
+//! the 0.6 melodic additions in `extra_voices.rs`.
 
 use std::f32::consts::TAU;
 
@@ -81,10 +82,13 @@ pub enum Instrument {
     ElectricBass,
     ElectricGuitar,
     SynthPluck,
+    TrapKit,
+    ReggaetonKit,
+    LatinPerc,
 }
 
 impl Instrument {
-    pub const ALL: [Instrument; 30] = [
+    pub const ALL: [Instrument; 33] = [
         Instrument::Piano,
         Instrument::ElectricPiano,
         Instrument::Organ,
@@ -115,6 +119,9 @@ impl Instrument {
         Instrument::ElectricBass,
         Instrument::ElectricGuitar,
         Instrument::SynthPluck,
+        Instrument::TrapKit,
+        Instrument::ReggaetonKit,
+        Instrument::LatinPerc,
     ];
 
     pub fn name(self) -> &'static str {
@@ -149,6 +156,9 @@ impl Instrument {
             Instrument::ElectricBass => "Fingered Bass",
             Instrument::ElectricGuitar => "Electric Guitar",
             Instrument::SynthPluck => "Synth Pluck",
+            Instrument::TrapKit => "Trap Kit",
+            Instrument::ReggaetonKit => "Reggaeton Kit",
+            Instrument::LatinPerc => "Latin Percussion",
         }
     }
 
@@ -184,6 +194,9 @@ impl Instrument {
             Instrument::ElectricBass => "Round fingered bass",
             Instrument::ElectricGuitar => "Overdriven plucked guitar",
             Instrument::SynthPluck => "Short, bright saw pluck",
+            Instrument::TrapKit => "Hard trap drums, 808 boom on B3",
+            Instrument::ReggaetonKit => "Dembow kick, gated snare, congas",
+            Instrument::LatinPerc => "Congas, bongos, timbales, shakers",
         }
     }
 
@@ -201,7 +214,7 @@ impl Instrument {
             Instrument::Strings | Instrument::WarmPad | Instrument::Choir => Category::Pads,
             Instrument::Bell | Instrument::Marimba | Instrument::MusicBox | Instrument::Vibraphone => Category::Mallets,
             Instrument::Brass | Instrument::Flute => Category::Brass,
-            Instrument::DrumKit | Instrument::Kit808 => Category::Drums,
+            Instrument::DrumKit | Instrument::Kit808 | Instrument::TrapKit | Instrument::ReggaetonKit | Instrument::LatinPerc => Category::Drums,
         }
     }
 
@@ -232,7 +245,7 @@ impl Instrument {
             Instrument::Brass => 12.0,
             Instrument::Flute => 10.0,
             // Drums are one-shots: they end by themselves, note-off must not cut them.
-            Instrument::DrumKit | Instrument::Kit808 => 0.0,
+            Instrument::DrumKit | Instrument::Kit808 | Instrument::TrapKit | Instrument::ReggaetonKit | Instrument::LatinPerc => 0.0,
             Instrument::Bass808 => 18.0,
             Instrument::ElectricBass => 22.0,
             Instrument::ElectricGuitar => 14.0,
@@ -582,6 +595,18 @@ impl Voice {
                     None => return None, // a drum hit ends by itself: no 12 s voice
                 }
             }
+
+            Instrument::TrapKit | Instrument::ReggaetonKit => {
+                let style = if self.inst == Instrument::TrapKit { crate::drums_urban::Style::Trap } else { crate::drums_urban::Style::Reggaeton };
+                match crate::drums_urban::hit(style, self.key, t, dt, &mut self.rng, &mut self.st) {
+                    Some(x) => (x, 0.0005, 0.6),
+                    None => return None,
+                }
+            }
+            Instrument::LatinPerc => match crate::latin::hit(self.key, t, dt, &mut self.rng, &mut self.st) {
+                Some(x) => (x, 0.0005, 0.6),
+                None => return None,
+            },
 
             // ------------------------------------------------ Extra voices (0.6, see extra_voices.rs)
             Instrument::Bass808 | Instrument::ElectricBass | Instrument::ElectricGuitar | Instrument::SynthPluck => {

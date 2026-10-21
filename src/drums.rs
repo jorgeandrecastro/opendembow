@@ -7,7 +7,7 @@
 use std::f32::consts::TAU;
 
 #[derive(Clone, Copy)]
-enum Pad {
+pub(crate) enum Pad {
     Kick,
     Rim,
     Snare(bool),     // tight
@@ -20,8 +20,13 @@ enum Pad {
     Shaker(f32), // decay rate
 }
 
-fn pad(key: u8) -> Pad {
-    match 36 + (key as i32 - 36).rem_euclid(24) {
+/// Folds any MIDI key into the 36..=59 drum range.
+pub(crate) fn fold(key: u8) -> i32 {
+    36 + (key as i32 - 36).rem_euclid(24)
+}
+
+pub(crate) fn pad(key: u8) -> Pad {
+    match fold(key) {
         36 => Pad::Kick,
         37 => Pad::Rim,
         38 => Pad::Snare(false),
@@ -50,7 +55,7 @@ fn pad(key: u8) -> Pad {
 }
 
 /// White noise in [-1, 1) (xorshift32).
-fn noise(rng: &mut u32) -> f32 {
+pub(crate) fn noise(rng: &mut u32) -> f32 {
     let mut x = *rng;
     if x == 0 {
         x = 0x1234_5678;
@@ -63,13 +68,13 @@ fn noise(rng: &mut u32) -> f32 {
 }
 
 /// One-pole high-pass (state in `st`, `a` = coefficient of the matching low-pass).
-fn highpass(st: &mut f32, x: f32, a: f32) -> f32 {
+pub(crate) fn highpass(st: &mut f32, x: f32, a: f32) -> f32 {
     *st += a * (x - *st);
     x - *st
 }
 
 /// Six detuned square waves: the classic 808 "metallic" cymbal source.
-fn metal(t: f32) -> f32 {
+pub(crate) fn metal(t: f32) -> f32 {
     const F: [f32; 6] = [205.3, 304.4, 369.6, 522.7, 540.0, 800.0];
     F.iter().map(|f| if (TAU * f * t).sin() > 0.0 { 1.0 } else { -1.0 }).sum::<f32>() / 6.0
 }

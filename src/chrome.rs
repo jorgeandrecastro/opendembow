@@ -545,7 +545,7 @@ impl App {
                 ui.label("5. Mixer & Effects tab: volume, pan, EQ, compressor, reverb, delay per track.");
                 ui.label("6. Edit clips: Split (B), trim to playhead ( [ and ] ), cut / copy / paste.");
                 ui.label("7. File > Export to bounce your song to WAV, stems or MIDI.");
-                ui.label("8. Drums: pick Drum Kit or 808 Kit. C2 = kick, D2 = snare, E2 = clap, F#2 = closed hat, A#2 = open hat.");
+                ui.label("8. Drums: pick Drum Kit, 808, Trap or Reggaeton Kit. C2 = kick, D2 = snare, D#2 = clap, F#2 = closed hat, A#2 = open hat.");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
                 let rows = [

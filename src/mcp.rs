@@ -35,7 +35,7 @@ fn tools() -> Value {
     let note = json!({ "type": "object", "properties": {
         "start": { "type": "number", "description": "beats from the start of the clip" },
         "length": { "type": "number", "description": "beats" },
-        "key": { "type": "integer", "description": "MIDI note 0-127, 60 = middle C. On Drum Kit / 808 Kit tracks the key picks the drum: 36 kick, 37 rim, 38 snare, 39 clap, 40 tight snare, 41/43/45/47/48/50 toms, 42 closed hat, 44 pedal hat, 46 open hat, 49/52/55/57 crash, 51/53/59 ride, 54/58 shaker, 56 cowbell (notes outside 36-59 wrap around)" },
+        "key": { "type": "integer", "description": "MIDI note 0-127, 60 = middle C. On Drum Kit / 808 Kit / Trap Kit / Reggaeton Kit tracks the key picks the drum: 36 kick, 37 rim, 38 snare, 39 clap, 40 tight snare, 41/43/45/47/48/50 toms, 42 closed hat, 44 pedal hat, 46 open hat, 49/52/55/57 crash, 51/53/59 ride, 54/58 shaker, 56 cowbell (notes outside 36-59 wrap around). Trap Kit: 59 is a long 808 boom and toms are 808 toms; Reggaeton Kit: toms are congas. Latin Percussion has its own map: 36/38 conga, 37/39 mute/slap, 40/41 bongo, 42/43 timbale, 44 paila, 45 cowbell, 46/47 guiro, 48 claves, 49 maracas, 50/58 shaker, 51 tambourine, 52/53 agogo, 54 triangle, 55 cabasa, 56 woodblock, 57 clap, 59 tumba" },
         "velocity": { "type": "number", "description": "0.0-1.0, default 0.8" } },
         "required": ["start", "length", "key"] });
     json!([

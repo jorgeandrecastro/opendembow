@@ -1,4 +1,4 @@
-# OpenDembow 0.6
+# OpenDembow 0.6.1
 
 ![OpenDembow Interface](images/image1.png)
 ![OpenDembow Interface](images/image2.png)
@@ -20,8 +20,8 @@ serde_json = "1"
 ```
 
 ## Features
-- **30 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, **Drums & Percussion** (new)
-- **Drums** (new in 0.6): a **Drum Kit** (acoustic style) and an **808 Kit** (electronic, long 808 kick, clap, cowbell), played with a General MIDI style note map (see below)
+- **33 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, **Drums & Percussion** (new)
+- **Drums** (new in 0.6): five kits - **Drum Kit** (acoustic style), **808 Kit** (electronic), **Trap Kit**, **Reggaeton Kit** (dembow) and **Latin Percussion** (congas, bongos, timbales, shakers) - played with a General MIDI style note map (see below)
 - **New instruments in 0.6**: 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - Ableton-style instrument browser: search box, category filters, instruments grouped by category, and the instrument of the selected track highlighted
 - Drag instruments from the browser onto the timeline (new track, or drop on a track to swap its instrument); the list keeps scrolling while you drag
@@ -38,7 +38,7 @@ serde_json = "1"
 - Export: mixdown WAV, stems (one WAV per track), MIDI file
 
 ## Drums
-Add a **Drum Kit** or **808 Kit** track and play it with the on-screen keyboard, your computer keys or the piano roll.
+Add a drum kit track (**Drum Kit**, **808 Kit**, **Trap Kit** or **Reggaeton Kit**) and play it with the on-screen keyboard, your computer keys or the piano roll.
 Notes are folded into two octaves (MIDI 36-59), so every key of the keyboard plays a drum:
 
 | MIDI key | Note | Sound |
@@ -56,7 +56,24 @@ Notes are folded into two octaves (MIDI 36-59), so every key of the keyboard pla
 | 56 | G#3 | Cowbell |
 
 Notes below 36 or above 59 wrap around (60 is a kick again). Drum hits end by themselves, so note length does not cut them.
-The demo song contains a **dembow** beat on the 808 Kit: kick on every beat, snares on the classic 3+3+2 accents, hi-hats on the eighth notes.
+
+All four kits share this map, so a pattern keeps working when you swap kits. What changes is the sound:
+- **Trap Kit**: hard kick with a sub tail, snappy snare, tight hats, long 808 toms; key 59 (B3) is a long **808 boom**.
+- **Reggaeton Kit**: boxy dembow kick, bright snare with a short gate, short hats, the toms are **congas**.
+
+**Latin Percussion** has its own map (same two octaves):
+
+| MIDI key | Sound | MIDI key | Sound |
+|---|---|---|---|
+| 36 / 38 | Conga low / high | 47 | Guiro long |
+| 37 / 39 | Conga mute / slap | 48 | Claves |
+| 40 / 41 | Bongo low / high | 49 | Maracas |
+| 42 / 43 | Timbale low / high | 50 / 58 | Shaker / long shaker |
+| 44 | Paila (timbale rim) | 51 | Tambourine |
+| 45 | Cowbell | 52 / 53 | Agogo high / low |
+| 46 | Guiro short | 54 / 55 | Triangle / cabasa |
+| 56 | Woodblock | 57 / 59 | Hand clap / tumba |
+The demo song contains a **dembow** beat on the Reggaeton Kit: kick on every beat, snares on the classic 3+3+2 accents, hi-hats on the eighth notes.
 
 ## Editing shortcuts
 | Key | Action |
@@ -91,7 +108,7 @@ Audio clips are stored next to the project as `<name>.audioN.wav`.
 ## Layout
 - `engine.rs` real-time mixer (one effect chain per track), cpal output, offline bounce
 - `instruments.rs` synth voices and instrument categories - `project.rs` data model - `project_io.rs` save/load + MIDI export
-- `drums.rs` synthesized drum kits (Drum Kit, 808 Kit) - `extra_voices.rs` 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
+- `drums.rs` Drum Kit and 808 Kit - `drums_urban.rs` Trap Kit and Reggaeton Kit - `latin.rs` Latin Percussion - `extra_voices.rs` 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - `arrangement.rs`, `pianoroll.rs`, `keyboard.rs`, `chrome.rs` (menus, instrument browser), `theme.rs` interface
 - `effects.rs` effect settings, DSP (`FxProcessor`) and the Mixer & Effects panel
 - `edit.rs` split / trim / clipboard / audio tools and the bottom-panel tabs
