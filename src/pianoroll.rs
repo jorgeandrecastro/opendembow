@@ -264,6 +264,8 @@ impl App {
         p.rect_stroke(rect, 14.0, stroke(1.0, HAIR));
         let gp = ui.painter_at(grid);
         let kp = ui.painter_at(keys_r);
+        // 0.7: on a drum track every row shows the name of its pad
+        let drum = self.drum_map(t);
         for r in 0..rows {
             let key = top - r;
             if key < 0 {
@@ -275,6 +277,14 @@ impl App {
             gp.rect_filled(row, 0.0, if black { Color32::from_rgb(246, 246, 249) } else { Color32::WHITE });
             let line = if key % 12 == 0 { Color32::from_rgb(214, 214, 220) } else { Color32::from_rgb(240, 240, 244) };
             gp.line_segment([pos2(row.left(), row.bottom()), pos2(row.right(), row.bottom())], stroke(1.0, line));
+            if let Some(map) = drum {
+                if !(36..=59).contains(&key) {
+                    // outside the two drum octaves: the key wraps around
+                    gp.rect_filled(row, 0.0, tint(INK, 6));
+                } else if let Some(nm) = crate::drum_names::name(map, key) {
+                    gp.text(pos2(grid.left() + 8.0, row.center().y), Align2::LEFT_CENTER, nm, FontId::proportional(10.5), GREY);
+                }
+            }
             // key column
             let down = self.down.contains(&(key as u8));
             let kr_row = Rect::from_min_size(pos2(keys_r.left(), y), vec2(KEYS_W, ROW_H));

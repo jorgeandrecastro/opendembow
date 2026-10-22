@@ -1,23 +1,27 @@
-//! OpenDembow 0.6.1 - a modern, elegant DAW.
+//! OpenDembow 0.7 - a modern, elegant DAW.
 
 mod arrangement;
 mod audio_io;
 mod chrome;
+mod drum_names;
 mod drums;
 mod drums_urban;
 mod edit;
 mod effects;
 mod engine;
 mod extra_voices;
+mod favorites;
 mod files;
 mod instruments;
 mod keyboard;
 mod latin;
 mod mcp;
 mod metronome;
+mod midi_in;
 mod pianoroll;
 mod project;
 mod project_io;
+mod record;
 mod theme;
 
 use eframe::egui::{self, Color32, Key, Rect};
@@ -100,6 +104,17 @@ struct App {
     /// The clip as it was when an edge drag began.
     edge_orig: Option<Clip>,
     mcp: Option<std::sync::mpsc::Receiver<mcp::Call>>,
+    // 0.7
+    /// Recording state (off / count-in / recording).
+    rec: record::RecState,
+    /// Velocity of the next live note (set by MIDI input, 0.8 for the computer keyboard).
+    rec_vel: f32,
+    /// Play a 4-beat count-in before recording.
+    count_in: bool,
+    /// MIDI keyboard / controller input.
+    midi: midi_in::MidiIn,
+    /// Favourite instruments (by name).
+    favs: HashSet<String>,
 }
 
 fn piano_key(k: Key) -> Option<u8> {
@@ -133,7 +148,7 @@ impl App {
             if mcp.is_some() {
                 "MCP server active (stdio). An AI assistant can now control this project.".into()
             } else {
-                "Welcome to OpenDembow. Press Space to play, or press ? for help.".into()
+                "Welcome to OpenDembow. Press Space to play, R to record, or press ? for help.".into()
             }
         });
         let mut app = Self {
@@ -172,6 +187,11 @@ impl App {
             pen: false,
             edge_orig: None,
             mcp,
+            rec: record::RecState::Off,
+            rec_vel: 0.8,
+            count_in: true,
+            midi: midi_in::MidiIn::start(cc.egui_ctx.clone()),
+            favs: favorites::load(),
         };
         app.select_clip(0, 0);
         app
@@ -338,15 +358,19 @@ impl App {
     }
 
     fn note_on(&mut self, key: u8) {
+        // velocity comes from the MIDI controller when there is one, 0.8 otherwise
+        let vel = std::mem::replace(&mut self.rec_vel, 0.8);
         if let Some((t, i)) = self.live_inst() {
             self.engine.note_on(t, i, key);
             self.down.insert(key);
+            self.rec_note_on(t, key, vel);
         }
     }
 
     fn note_off(&mut self, key: u8) {
         self.down.remove(&key);
         self.engine.note_off(key);
+        self.rec_note_off(key);
     }
 
     fn audition(&self, t: usize, key: u8) {
@@ -416,13 +440,23 @@ impl App {
                 continue;
             }
             match key {
-                Key::Space => self.engine.toggle_play(),
+                Key::Space => {
+                    if self.is_recording() {
+                        self.toggle_record()
+                    } else {
+                        self.engine.toggle_play()
+                    }
+                }
+                Key::R if !modifiers.command => self.toggle_record(),
                 Key::Home => self.rewind(),
                 Key::M => self.metronome.toggle(),
                 Key::F1 => self.show_help = !self.show_help,
                 Key::Delete | Key::Backspace => self.delete_selected(),
                 Key::P if !modifiers.command => self.toggle_pen(),
-                Key::Escape => self.pen = false,
+                Key::Escape => {
+                    self.pen = false;
+                    self.cancel_count_in();
+                }
                 Key::B if !modifiers.command => self.split_at_playhead(),
                 Key::OpenBracket => self.trim_start_to_playhead(),
                 Key::CloseBracket => self.trim_end_to_playhead(),
@@ -471,6 +505,8 @@ impl eframe::App for App {
         if active || !self.down.is_empty() {
             ctx.request_repaint();
         }
+        self.midi_poll();
+        self.rec_tick(ctx);
         self.mcp_poll();
         if self.mcp.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(60));

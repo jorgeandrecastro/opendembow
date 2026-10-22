@@ -13,6 +13,8 @@ use std::f32::consts::TAU;
 struct BrowserState {
     cat: Option<Category>,
     query: String,
+    /// Show only favourites.
+    favs: bool,
     /// Scroll offset forced for the next frame (auto-scroll while dragging).
     force: Option<f32>,
 }
@@ -104,6 +106,31 @@ fn draw_tile(p: &Painter, rect: Rect, inst: Instrument) {
     let col = PALETTE[cat as usize % 8];
     p.rect_filled(rect, 10.0, tint(col, 40));
     draw_glyph(p, rect, cat, col);
+}
+
+/// Five-pointed star: filled with `fill`, or an outline in `col` when `fill` is `None`.
+fn draw_star(p: &Painter, c: Pos2, r: f32, fill: Option<Color32>, col: Color32) {
+    let pts: Vec<Pos2> = (0..10)
+        .map(|i| {
+            let a = -TAU / 4.0 + i as f32 * TAU / 10.0;
+            let rr = if i % 2 == 0 { r } else { r * 0.45 };
+            pos2(c.x + rr * a.cos(), c.y + rr * a.sin())
+        })
+        .collect();
+    match fill {
+        Some(f) => {
+            // inner pentagon + five triangles (each polygon is convex)
+            let inner: Vec<Pos2> = (0..5).map(|k| pts[2 * k + 1]).collect();
+            p.add(Shape::convex_polygon(inner, f, egui::Stroke::NONE));
+            for k in 0..5 {
+                let i = 2 * k;
+                p.add(Shape::convex_polygon(vec![pts[i], pts[(i + 9) % 10], pts[i + 1]], f, egui::Stroke::NONE));
+            }
+        }
+        None => {
+            p.add(Shape::closed_line(pts, stroke(1.4, col)));
+        }
+    }
 }
 
 /// Floating card that follows the cursor while an instrument is dragged.
@@ -277,6 +304,28 @@ impl App {
                     ui.close_menu();
                 }
                 ui.separator();
+                // 0.7: recording options and MIDI input
+                ui.checkbox(&mut self.count_in, "Count-in before recording (4 beats)");
+                ui.menu_button("MIDI Input", |ui| {
+                    if ui.button("Refresh devices").clicked() {
+                        self.midi.refresh();
+                    }
+                    let ports = self.midi.ports.clone();
+                    if ports.is_empty() {
+                        ui.label(RichText::new("No MIDI device found").color(GREY));
+                    }
+                    for name in ports {
+                        let sel = self.midi.current.as_deref() == Some(name.as_str());
+                        if ui.selectable_label(sel, &name).clicked() {
+                            self.status = match self.midi.connect(&name) {
+                                Ok(()) => format!("MIDI input: {name}"),
+                                Err(e) => format!("MIDI error: {e}"),
+                            };
+                            ui.close_menu();
+                        }
+                    }
+                });
+                ui.separator();
                 let has = !self.project.tracks.is_empty();
                 if ui.add_enabled(has, egui::Button::new("Delete Selected Track")).clicked() {
                     self.delete_track(self.sel_track);
@@ -299,7 +348,7 @@ impl App {
     pub fn ui_top(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("OpenDembow").size(18.0).strong());
-            ui.label(RichText::new("0.6").color(GREY));
+            ui.label(RichText::new("0.7").color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
@@ -312,6 +361,15 @@ impl App {
                 .min_size(vec2(52.0, 32.0));
             if ui.add(play).clicked() {
                 self.engine.toggle_play();
+            }
+            // record button (count-in, then the notes you play become a clip)
+            let rec_on = self.is_recording();
+            let rec = egui::Button::new(RichText::new("●").size(16.0).color(if rec_on { Color32::WHITE } else { RED }))
+                .fill(if rec_on { RED } else { Color32::from_rgb(243, 243, 247) })
+                .rounding(Rounding::same(18.0))
+                .min_size(vec2(40.0, 32.0));
+            if ui.add(rec).on_hover_text("Record (R) - count-in first, then plays your notes into a new clip").clicked() {
+                self.toggle_record();
             }
             ui.add_space(10.0);
             let mut bpm = self.project.bpm;
@@ -354,10 +412,17 @@ impl App {
         });
     }
 
-    /// One instrument row: tinted glyph tile, name, description.
+    /// One instrument row: tinted glyph tile, name, description, favourite star.
     fn browser_row(&mut self, ui: &mut egui::Ui, inst: Instrument) {
         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::click_and_drag());
         let resp = resp.on_hover_cursor(egui::CursorIcon::Grab);
+        let fav = self.favs.contains(inst.name());
+        // the star sits left of the "+" button and takes its own clicks
+        let star_c = pos2(rect.right() - 46.0, rect.center().y);
+        let sresp = ui
+            .interact(Rect::from_center_size(star_c, vec2(22.0, 22.0)), ui.id().with(("star", inst.name())), Sense::click())
+            .on_hover_text(if fav { "Remove from favourites" } else { "Add to favourites" });
+        let row_hover = ui.rect_contains_pointer(rect);
         let current = matches!(
             self.project.tracks.get(self.sel_track).map(|t| t.kind),
             Some(TrackKind::Instrument(i)) if i == inst
@@ -365,19 +430,33 @@ impl App {
         let p = ui.painter();
         if current {
             p.rect_filled(rect, 12.0, tint(ACCENT, 16));
-        } else if resp.hovered() {
+        } else if row_hover {
             p.rect_filled(rect, 12.0, Color32::from_rgb(243, 243, 247));
         }
         let tile = Rect::from_min_size(pos2(rect.left() + 8.0, rect.center().y - 17.0), vec2(34.0, 34.0));
         draw_tile(p, tile, inst);
-        let tp = p.with_clip_rect(Rect::from_min_max(rect.min, pos2(rect.right() - 36.0, rect.bottom())));
+        let tp = p.with_clip_rect(Rect::from_min_max(rect.min, pos2(rect.right() - 62.0, rect.bottom())));
         tp.text(pos2(tile.right() + 12.0, rect.center().y - 8.0), Align2::LEFT_CENTER, inst.name(), FontId::proportional(13.5), INK);
         tp.text(pos2(tile.right() + 12.0, rect.center().y + 9.0), Align2::LEFT_CENTER, inst.blurb(), FontId::proportional(11.0), GREY);
-        if resp.hovered() && self.drag_inst.is_none() {
+        if fav {
+            draw_star(p, star_c, 7.5, Some(ACCENT), ACCENT);
+        } else if row_hover {
+            draw_star(p, star_c, 7.5, None, GREY);
+        }
+        if row_hover && self.drag_inst.is_none() {
             let c = pos2(rect.right() - 20.0, rect.center().y);
             p.circle_filled(c, 10.0, ACCENT);
             p.line_segment([c - vec2(4.0, 0.0), c + vec2(4.0, 0.0)], stroke(1.6, Color32::WHITE));
             p.line_segment([c - vec2(0.0, 4.0), c + vec2(0.0, 4.0)], stroke(1.6, Color32::WHITE));
+        }
+        if sresp.clicked() {
+            if fav {
+                self.favs.remove(inst.name());
+            } else {
+                self.favs.insert(inst.name().to_string());
+            }
+            crate::favorites::save(&self.favs);
+            return;
         }
         if resp.drag_started() {
             self.drag_inst = Some(inst);
@@ -434,6 +513,9 @@ impl App {
                 };
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(5.0, 6.0);
+                    if chip(ui, "★ Favourites", st.favs) {
+                        st.favs = !st.favs;
+                    }
                     if chip(ui, "All", st.cat.is_none()) {
                         st.cat = None;
                     }
@@ -446,9 +528,12 @@ impl App {
                 ui.add_space(8.0);
 
                 let cat = st.cat;
+                let favs_only = st.favs;
+                let favset = self.favs.clone();
                 let q = st.query.trim().to_lowercase();
                 let matches = |inst: &Instrument| -> bool {
                     (cat.is_none() || Some(inst.category()) == cat)
+                        && (!favs_only || favset.contains(inst.name()))
                         && (q.is_empty()
                             || inst.name().to_lowercase().contains(&q)
                             || inst.blurb().to_lowercase().contains(&q)
@@ -487,7 +572,14 @@ impl App {
                     if shown == 0 {
                         ui.add_space(20.0);
                         ui.vertical_centered(|ui| {
-                            ui.label(RichText::new("No instrument found").color(GREY));
+                            ui.label(
+                                RichText::new(if favs_only {
+                                    "No favourites yet - click the star on an instrument"
+                                } else {
+                                    "No instrument found"
+                                })
+                                .color(GREY),
+                            );
                         });
                     }
                 });
@@ -533,30 +625,33 @@ impl App {
         egui::Window::new("OpenDembow Help")
             .open(&mut open)
             .collapsible(false)
-            .resizable(false)
+            .resizable(true)
             .default_width(520.0)
             .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.label(RichText::new("Quick start").size(15.0).strong());
-                ui.label("1. Pick a category on the left, then drag an instrument onto the timeline (or click it).");
+                ui.label("1. Pick a category on the left, then drag an instrument onto the timeline (or click it). Click the star to keep it in your favourites.");
                 ui.label("2. Double-click an empty lane to create a clip, then add notes in the piano roll.");
-                ui.label("3. Play any instrument live with the on-screen keyboard or your computer keys.");
+                ui.label("3. Play any instrument live with the on-screen keyboard, your computer keys or a MIDI keyboard (Track > MIDI Input).");
                 ui.label("4. Press Space to play. Drag clips to move them. Use × on a track to delete it.");
                 ui.label("5. Mixer & Effects tab: volume, pan, EQ, compressor, reverb, delay per track.");
                 ui.label("6. Edit clips: Split (B), trim to playhead ( [ and ] ), cut / copy / paste.");
                 ui.label("7. File > Export to bounce your song to WAV, stems or MIDI.");
-                ui.label("8. Drums: pick Drum Kit, 808, Trap or Reggaeton Kit. C2 = kick, D2 = snare, D#2 = clap, F#2 = closed hat, A#2 = open hat.");
+                ui.label("8. Drums: pick Drum Kit, 808, Trap, Reggaeton Kit or Latin Percussion. The piano roll shows the name of every pad (C2 = kick, D2 = snare...).");
+                ui.label("9. Record: select an instrument track and press R (or the red button). After a 4-beat count-in, what you play becomes a new clip.");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
+                
                 let rows = [
-                    ("Space", "Play / pause"),
+                    ("Space", "Play / pause (stops recording)"),
+                    ("R", "Record: count-in, then play; R or Space to stop"),
                     ("Home", "Rewind to start"),
                     ("M", "Metronome on / off (right-click it for options)"),
                     ("A W S E D F T G Y H U J K O L", "Play notes (piano layout)"),
                     ("Z / X", "Keyboard octave down / up"),
                     ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"),
                     ("Ctrl+C / Ctrl+X / Ctrl+V", "Copy / cut / paste clip or note (at playhead)"),
-                    ("P / Esc", "Pen (draw / edit) mode on / off"),
+                    ("P / Esc", "Pen (draw / edit) mode on / off (Esc also cancels a count-in)"),
                     ("B", "Split selected clip at the playhead"),
                     ("[  /  ]", "Trim clip start / end to the playhead"),
                     ("Ctrl+D", "Duplicate selected clip"),
@@ -573,16 +668,16 @@ impl App {
                     ("Pinch or Ctrl+wheel", "Zoom the timeline or piano roll"),
                     ("F1", "This window"),
                 ];
-                egui::Grid::new("shortcuts").num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
-                    for (k, d) in rows {
-                        ui.label(RichText::new(k).monospace().strong());
-                        ui.label(d);
-                        ui.end_row();
-                    }
+
+                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                    egui::Grid::new("shortcuts").num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
+                        for (k, desc) in rows {
+                            ui.label(RichText::new(k).strong().color(ACCENT));
+                            ui.label(desc);
+                            ui.end_row();
+                        }
+                    });
                 });
-                ui.add_space(10.0);
-                ui.label(RichText::new("Tip: start with `opendembow --mcp` to let an AI assistant (MCP) control the project.").size(12.0));
-                ui.label(RichText::new("OpenDembow 0.6 - made with Rust, egui and cpal.").color(GREY).size(12.0));
             });
         self.show_help = open;
     }
