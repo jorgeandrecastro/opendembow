@@ -42,6 +42,8 @@ midir = "0.10"     # MIDI input (new in 0.7)
 - Menu bar (File / Edit / Track / Help) and a "?" help button (F1)
 - Save / open projects (`.dembow`), undo / redo (Edit menu, Ctrl+Z)
 - Export: mixdown WAV, stems (one WAV per track), MIDI file
+- **Volume Automation** (new): click directly in the dedicated bottom lane of any track to add automation points and draw smooth volume curves.
+- **Scale-Aware Piano Roll** (new): select a root note and scale (Major, Minor, Pentatonic, Blues) to instantly color in-scale notes with an Ableton-like subtle green tint, shade out-of-scale notes, and guide composition with key labels.
 
 ## Recording and MIDI input
 1. Select an instrument track (click its header, or drop an instrument on the timeline).
@@ -99,6 +101,7 @@ The demo song contains a **dembow** beat on the Reggaeton Kit: kick on every bea
 | `[` / `]` | Trim clip start / end to the playhead |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste the selected note or clip (pasted at the playhead) |
 | `Ctrl+D` | Duplicate clip |
+| `Click (Track automation lane)` | Add a volume automation point |
 
 Press F1 inside the app for all shortcuts.
 
@@ -144,7 +147,7 @@ Favourite instruments are not part of a project: they are stored per user in `~/
 3. Write its sound in `Voice::next` (or in `extra_voices.rs` / `drums.rs` to keep files short).
 
 ## Roadmap
-Step sequencer, audio recording, recording quantization, MIDI velocity in the live sound, automation, dark theme,
+Step sequencer, audio recording, recording quantization, MIDI velocity in the live sound, dark theme,
 sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects.
 
 ## License

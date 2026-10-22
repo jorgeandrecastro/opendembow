@@ -15,8 +15,64 @@ pub fn size_label(v: f64) -> &'static str {
     SIZES.iter().find(|(_, s)| (s - v).abs() < 1e-9).map(|(l, _)| *l).unwrap_or("custom")
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Scale {
+    All,
+    Major,
+    Minor,
+    PentatonicMajor,
+    PentatonicMinor,
+    Blues,
+}
+
+impl Scale {
+    fn name(&self) -> &'static str {
+        match self {
+            Scale::All => "All (Chromatic)",
+            Scale::Major => "Major",
+            Scale::Minor => "Minor",
+            Scale::PentatonicMajor => "Pentatonic Major",
+            Scale::PentatonicMinor => "Pentatonic Minor",
+            Scale::Blues => "Blues",
+        }
+    }
+}
+
+#[derive(Clone)]
+struct RollScaleState {
+    scale: Scale,
+    root: u8, // 0 = C, 1 = C#, etc.
+}
+
+impl Default for RollScaleState {
+    fn default() -> Self {
+        Self { scale: Scale::All, root: 0 }
+    }
+}
+
+const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+fn is_in_scale(key: u8, scale: Scale, root: u8) -> bool {
+    if scale == Scale::All {
+        return true;
+    }
+    let semitone = (key as i32 - root as i32).rem_euclid(12);
+    let intervals: &[i32] = match scale {
+        Scale::All => &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        Scale::Major => &[0, 2, 4, 5, 7, 9, 11],
+        Scale::Minor => &[0, 2, 3, 5, 7, 8, 10],
+        Scale::PentatonicMajor => &[0, 2, 4, 7, 9],
+        Scale::PentatonicMinor => &[0, 3, 5, 7, 10],
+        Scale::Blues => &[0, 3, 5, 6, 7, 10],
+    };
+    intervals.contains(&semitone)
+}
+
 impl App {
     pub fn ui_roll(&mut self, ui: &mut egui::Ui) {
+        let sid = egui::Id::new("piano_roll_scale_state");
+        let mut st: RollScaleState = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
+
         let Some((t, c)) = self.sel_midi() else {
             ui.add_space(8.0);
             let (rect, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
@@ -36,15 +92,32 @@ impl App {
         let col = PALETTE[self.project.tracks[t].color % 8];
 
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().item_spacing.x = 6.0;
             ui.add_space(14.0);
             ui.label(RichText::new(title).strong());
-            let hint = if self.pen {
-                "Pen: click or drag to draw notes · drag a note to move · right-click: delete"
-            } else {
-                "Double-click: add note · drag: move · drag either edge: resize · Ctrl+click: cut"
-            };
-            ui.label(RichText::new(hint).size(11.5).color(GREY));
+
+            // Scale selector
+            ui.add_space(10.0);
+            ui.label(RichText::new("Scale:").size(11.5).color(GREY));
+            egui::ComboBox::from_id_salt("scale_root_combo")
+                .width(42.0)
+                .selected_text(NOTE_NAMES[st.root as usize])
+                .show_ui(ui, |ui| {
+                    for (i, name) in NOTE_NAMES.iter().enumerate() {
+                        ui.selectable_value(&mut st.root, i as u8, *name);
+                    }
+                });
+            egui::ComboBox::from_id_salt("scale_type_combo")
+                .width(125.0)
+                .selected_text(st.scale.name())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut st.scale, Scale::All, Scale::All.name());
+                    ui.selectable_value(&mut st.scale, Scale::Major, Scale::Major.name());
+                    ui.selectable_value(&mut st.scale, Scale::Minor, Scale::Minor.name());
+                    ui.selectable_value(&mut st.scale, Scale::PentatonicMajor, Scale::PentatonicMajor.name());
+                    ui.selectable_value(&mut st.scale, Scale::PentatonicMinor, Scale::PentatonicMinor.name());
+                    ui.selectable_value(&mut st.scale, Scale::Blues, Scale::Blues.name());
+                });
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.small_button("+").clicked() {
@@ -106,7 +179,6 @@ impl App {
 
         // note editing
         if gr.drag_started() {
-            // use where the mouse went down, not where it is after the drag threshold
             let origin = ui.input(|i| i.pointer.press_origin()).or_else(|| gr.interact_pointer_pos());
             if let Some(p) = origin {
                 let h = self.notes_ref(t, c).and_then(|n| hit(n, p));
@@ -203,7 +275,6 @@ impl App {
                 let ctrl = ui.input(|i| i.modifiers.command);
                 let h = self.notes_ref(t, c).and_then(|n| hit(n, p));
                 match h {
-                    // Ctrl+click on a note: cut it at the (snapped) click position
                     Some((i, _)) if ctrl => {
                         let cut = (beat_at(p.x) / g).round() * g;
                         self.sel_note = Some(i);
@@ -212,7 +283,6 @@ impl App {
                         }
                     }
                     Some((i, _)) => self.sel_note = Some(i),
-                    // empty space: the pen adds with one click, the arrow needs a double-click
                     None if self.pen || gr.double_clicked() => {
                         let key = key_at(p.y).clamp(0, 127) as u8;
                         let start = ((beat_at(p.x) / g).floor() * g).max(0.0);
@@ -242,7 +312,6 @@ impl App {
                 }
             }
         }
-        // clicking the key column plays the instrument
         let hk = if kr.is_pointer_button_down_on() {
             kr.interact_pointer_pos().map(|p| key_at(p.y).clamp(0, 127) as u8)
         } else {
@@ -264,8 +333,8 @@ impl App {
         p.rect_stroke(rect, 14.0, stroke(1.0, HAIR));
         let gp = ui.painter_at(grid);
         let kp = ui.painter_at(keys_r);
-        // 0.7: on a drum track every row shows the name of its pad
         let drum = self.drum_map(t);
+
         for r in 0..rows {
             let key = top - r;
             if key < 0 {
@@ -273,37 +342,79 @@ impl App {
             }
             let y = grid.top() + r as f32 * ROW_H;
             let black = matches!(key % 12, 1 | 3 | 6 | 8 | 10);
+            let in_scale = is_in_scale(key as u8, st.scale, st.root);
+            
             let row = Rect::from_min_size(pos2(grid.left(), y), vec2(grid.width(), ROW_H));
-            gp.rect_filled(row, 0.0, if black { Color32::from_rgb(246, 246, 249) } else { Color32::WHITE });
+            
+            // Background color logic: standard chromatic when "All", Ableton-style subtle green tint when a scale is selected
+            let bg_color = if st.scale != Scale::All {
+                if in_scale {
+                    if black { Color32::from_rgb(230, 245, 235) } else { Color32::from_rgb(240, 250, 242) }
+                } else {
+                    if black { Color32::from_rgb(235, 235, 238) } else { Color32::from_rgb(245, 245, 248) }
+                }
+            } else {
+                if black { Color32::from_rgb(246, 246, 249) } else { Color32::WHITE }
+            };
+
+            gp.rect_filled(row, 0.0, bg_color);
             let line = if key % 12 == 0 { Color32::from_rgb(214, 214, 220) } else { Color32::from_rgb(240, 240, 244) };
             gp.line_segment([pos2(row.left(), row.bottom()), pos2(row.right(), row.bottom())], stroke(1.0, line));
+            
             if let Some(map) = drum {
                 if !(36..=59).contains(&key) {
-                    // outside the two drum octaves: the key wraps around
                     gp.rect_filled(row, 0.0, tint(INK, 6));
                 } else if let Some(nm) = crate::drum_names::name(map, key) {
                     gp.text(pos2(grid.left() + 8.0, row.center().y), Align2::LEFT_CENTER, nm, FontId::proportional(10.5), GREY);
                 }
             }
-            // key column
+
+            // Key column (left side piano keys)
             let down = self.down.contains(&(key as u8));
             let kr_row = Rect::from_min_size(pos2(keys_r.left(), y), vec2(KEYS_W, ROW_H));
+            
+            let key_base_color = if st.scale != Scale::All {
+                if in_scale {
+                    if down { ACCENT } else { Color32::from_rgb(215, 240, 224) }
+                } else {
+                    if down { ACCENT } else if black { Color32::from_rgb(45, 45, 50) } else { Color32::WHITE }
+                }
+            } else {
+                if down { ACCENT } else if black { Color32::from_rgb(45, 45, 50) } else { Color32::WHITE }
+            };
+
             if black {
                 kp.rect_filled(kr_row, 0.0, Color32::WHITE);
-                let bk = Rect::from_min_size(kr_row.min, vec2(KEYS_W * 0.66, ROW_H));
-                kp.rect_filled(bk, 0.0, if down { ACCENT } else { INK });
+                let bk = Rect::from_min_size(kr_row.min, vec2(KEYS_W * 0.68, ROW_H));
+                kp.rect_filled(bk, 0.0, key_base_color);
+                
+                // Show note names only when a scale is active, or standard C notation for C keys if All
+                if st.scale != Scale::All {
+                    let note_name = NOTE_NAMES[(key % 12) as usize];
+                    let octave_num = (key / 12) as i32 - 1;
+                    let full_label = format!("{}{}", note_name, octave_num);
+                    let text_color = if down { Color32::WHITE } else { Color32::from_rgb(180, 180, 185) };
+                    kp.text(pos2(bk.center().x, bk.center().y), Align2::CENTER_CENTER, full_label, FontId::proportional(9.5), text_color);
+                }
             } else {
-                kp.rect_filled(kr_row, 0.0, if down { tint(ACCENT, 80) } else { Color32::WHITE });
+                kp.rect_filled(kr_row, 0.0, key_base_color);
                 kp.line_segment([pos2(kr_row.left(), kr_row.bottom()), pos2(kr_row.right(), kr_row.bottom())], stroke(1.0, HAIR));
-            }
-            if key % 12 == 0 {
-                kp.text(pos2(kr_row.right() - 6.0, kr_row.center().y), Align2::RIGHT_CENTER, format!("C{}", key / 12 - 1), FontId::proportional(10.5), GREY);
+                
+                // Show note names when scale is active, or standard C octave labels when in "All" mode
+                if st.scale != Scale::All {
+                    let note_name = NOTE_NAMES[(key % 12) as usize];
+                    let octave_num = (key / 12) as i32 - 1;
+                    let full_label = format!("{}{}", note_name, octave_num);
+                    let text_color = if down { Color32::WHITE } else { Color32::from_rgb(90, 90, 95) };
+                    kp.text(pos2(kr_row.right() - 20.0, kr_row.center().y), Align2::CENTER_CENTER, full_label, FontId::proportional(9.5), text_color);
+                } else if key % 12 == 0 {
+                    kp.text(pos2(kr_row.right() - 15.0, kr_row.center().y), Align2::CENTER_CENTER, format!("C{}", key / 12 - 1), FontId::proportional(10.0), GREY);
+                }
             }
         }
         let clip = &self.project.tracks[t].clips[c];
         let b0 = sx.floor() as i64;
         let b1 = (sx + (grid.width() / ppb) as f64).ceil() as i64;
-        // grid subdivisions follow the chosen grid when there is room for them
         let steps = (1.0 / g).round().max(1.0) as i32;
         let show_sub = steps > 1 && ppb * (g as f32) >= 12.0;
         for b in b0..=b1 {
@@ -338,5 +449,7 @@ impl App {
         if hx >= grid.left() && hx <= grid.right() {
             gp.line_segment([pos2(hx, grid.top()), pos2(hx, grid.bottom())], stroke(2.0, RED));
         }
+
+        ui.ctx().data_mut(|d| d.insert_temp(sid, st));
     }
 }
