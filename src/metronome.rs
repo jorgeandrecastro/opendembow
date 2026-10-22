@@ -233,12 +233,12 @@ impl Metronome {
             pos2(c.x + 3.0, c.y - 8.0),
             pos2(c.x - 3.0, c.y - 8.0),
         ];
-        p.add(Shape::closed_line(body, Stroke::new(1.6, fg)));
+        p.add(Shape::closed_line(body, Stroke::new(1.6_f32, fg)));
         let live = on && playing;
         let ang = if live { (pos_beats.rem_euclid(2.0) as f32 * PI).sin() * 0.55 } else { 0.0 };
         let pivot = pos2(c.x, c.y + 6.0);
         let dir = vec2(ang.sin(), -ang.cos());
-        p.line_segment([pivot, pivot + dir * 15.0], Stroke::new(1.6, fg));
+        p.line_segment([pivot, pivot + dir * 15.0], Stroke::new(1.6_f32, fg));
         p.circle_filled(pivot + dir * 9.0, 2.2, fg);
 
         // beat flash (yellow on the first beat of the bar)

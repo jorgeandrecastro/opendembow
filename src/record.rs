@@ -109,12 +109,14 @@ impl App {
             .show(ctx, |ui| {
                 let (rect, resp) = ui.allocate_exact_size(screen.size(), egui::Sense::click());
                 let p = ui.painter();
-                p.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 238));
+                
+                // Aucun fond dessiné ici : ton DAW reste 100% visible !
+                
                 let c = rect.center();
 
                 // the number pops in big and shrinks / fades during its beat
                 let size = 340.0 - 90.0 * frac;
-                let col = ACCENT.gamma_multiply(1.0 - 0.55 * frac);
+                let col = ACCENT.gamma_multiply(1.0 - 0.35 * frac);
                 p.text(pos2(c.x, c.y - 40.0), Align2::CENTER_CENTER, number.to_string(), FontId::proportional(size), col);
 
                 // one dot per beat
@@ -122,7 +124,7 @@ impl App {
                 let x0 = c.x - gap * (COUNT_IN_BEATS as f32 - 1.0) / 2.0;
                 for i in 0..COUNT_IN_BEATS {
                     let on = i <= k;
-                    p.circle_filled(pos2(x0 + gap * i as f32, c.y + 190.0), 7.0, if on { ACCENT } else { ACCENT.gamma_multiply(0.2) });
+                    p.circle_filled(pos2(x0 + gap * i as f32, c.y + 190.0), 7.0, if on { ACCENT } else { ACCENT.gamma_multiply(0.3) });
                 }
                 p.text(
                     pos2(c.x, c.y + 235.0),

@@ -508,6 +508,7 @@ impl eframe::App for App {
         self.midi_poll();
         self.rec_tick(ctx);
         self.mcp_poll();
+        self.ui_count_in(ctx);
         if self.mcp.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(60));
         }
