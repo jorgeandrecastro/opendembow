@@ -643,7 +643,7 @@ impl App {
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
                 
                 let rows = [
-                    ("Space", "Play / pause (stops recording)"),
+                   ("Space", "Play / pause (stops recording)"),
                     ("R", "Record: count-in, then play; R or Space to stop"),
                     ("Home", "Rewind to start"),
                     ("M", "Metronome on / off (right-click it for options)"),
@@ -663,10 +663,10 @@ impl App {
                     ("Ctrl+click clip / note", "Cut it at the click (B cuts at the playhead)"),
                     ("Right-click note", "Delete note"),
                     ("Right-click track", "Change instrument / delete track"),
+                    ("Click (Track automation lane)", "Add volume automation point"),
                     ("Ctrl+S / Ctrl+O", "Save / open project"),
                     ("Ctrl+I / Ctrl+E", "Import audio / export mixdown"),
                     ("Pinch or Ctrl+wheel", "Zoom the timeline or piano roll"),
-                    ("R", "Record: starts recording immediately into a live-expanding clip; R or Space to stop"),
                     ("F1", "This window"),
                 ];
 

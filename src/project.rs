@@ -29,6 +29,24 @@ pub struct Clip {
     pub kind: ClipKind,
 }
 
+/// Un point individuel d'une courbe d'automatisation
+#[derive(Clone, Copy, Debug)]
+pub struct AutomationPoint {
+    /// Position temporelle en battements (beats) sur la timeline
+    pub beat: f64,
+    /// Valeur du paramètre (généralement normalisée entre 0.0 et 1.0, ou selon la plage du paramètre)
+    pub value: f32,
+}
+
+/// Une ligne d'automatisation complète pour un paramètre donné sur une piste
+#[derive(Clone, Debug)]
+pub struct AutomationLane {
+    /// Identifiant du paramètre ciblé (ex: "volume", "pan", "fx_reverb_mix", "cutoff")
+    pub parameter_id: String,
+    /// Liste des points clés de la courbe, triés par ordre de temps
+    pub points: Vec<AutomationPoint>,
+}
+
 impl Clip {
     pub fn len_beats(&self, bpm: f64, sr: f32) -> f64 {
         match &self.kind {
@@ -56,6 +74,8 @@ pub struct Track {
     pub clips: Vec<Clip>,
     /// EQ, compressor, reverb, delay.
     pub fx: FxSettings,
+    /// Lignes d'automatisation de la piste 
+    pub automations: Vec<AutomationLane>,
 }
 
 impl Track {
@@ -70,7 +90,36 @@ impl Track {
             solo: false,
             clips: Vec::new(),
             fx: FxSettings::default(),
+            automations: Vec::new(),
         }
+    }
+
+    /// Récupère la valeur interpolée d'un paramètre automatisé à un battement (beat) précis
+    pub fn get_automation_value(&self, parameter_id: &str, current_beat: f64, default_value: f32) -> f32 {
+        let Some(lane) = self.automations.iter().find(|l| l.parameter_id == parameter_id) else {
+            return default_value;
+        };
+        if lane.points.is_empty() {
+            return default_value;
+        }
+
+        if current_beat <= lane.points[0].beat {
+            return lane.points[0].value;
+        }
+        if current_beat >= lane.points.last().unwrap().beat {
+            return lane.points.last().unwrap().value;
+        }
+
+        for window in lane.points.windows(2) {
+            let p1 = window[0];
+            let p2 = window[1];
+            if current_beat >= p1.beat && current_beat <= p2.beat {
+                let t = (current_beat - p1.beat) / (p2.beat - p1.beat);
+                return p1.value + (p2.value - p1.value) * t as f32;
+            }
+        }
+
+        default_value
     }
 }
 

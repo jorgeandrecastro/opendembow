@@ -15,14 +15,6 @@ fn soft(x: f32) -> f32 {
     }
 }
 
-fn gains(t: &Track, any_solo: bool) -> (f32, f32) {
-    if t.mute || (any_solo && !t.solo) {
-        return (0.0, 0.0);
-    }
-    let ang = (t.pan.clamp(-1.0, 1.0) + 1.0) * 0.25 * std::f32::consts::PI;
-    (t.volume * ang.cos() * std::f32::consts::SQRT_2, t.volume * ang.sin() * std::f32::consts::SQRT_2)
-}
-
 pub struct Mixer {
     pub voices: Vec<Voice>,
     pub meters: Vec<f32>,
@@ -93,8 +85,7 @@ impl Mixer {
 
         if playing {
             for (ti, t) in p.tracks.iter().enumerate() {
-                let (gl, gr) = gains(t, any_solo);
-                if gl == 0.0 && gr == 0.0 {
+                if t.mute || (any_solo && !t.solo) {
                     continue;
                 }
                 for c in &t.clips {
@@ -159,13 +150,29 @@ impl Mixer {
             true
         });
 
-        // Track effects first, THEN volume/pan/mute/solo, THEN sum into the master bus.
+        // Track effects first, THEN automated volume/pan/mute/solo, THEN sum into the master bus.
         for ti in 0..count {
             let t = &p.tracks[ti];
             fx[ti].process_block(&t.fx, &mut tl[ti], &mut tr[ti]);
-            let (gl, gr) = gains(t, any_solo);
+
+            if t.mute || (any_solo && !t.solo) {
+                peaks[ti] = 0.0;
+                continue;
+            }
+
             let mut pk = 0.0f32;
             for i in 0..n {
+                // Position en battements (beats) pour cet échantillon précis
+                let current_beat = (pos + i) as f64 / spb;
+
+                // Lecture dynamique des valeurs automatisées (ou valeurs par défaut des sliders)
+                let vol = t.get_automation_value("volume", current_beat, t.volume);
+                let pan = t.get_automation_value("pan", current_beat, t.pan);
+
+                let ang = (pan.clamp(-1.0, 1.0) + 1.0) * 0.25 * std::f32::consts::PI;
+                let gl = vol * ang.cos() * std::f32::consts::SQRT_2;
+                let gr = vol * ang.sin() * std::f32::consts::SQRT_2;
+
                 let a = tl[ti][i] * gl;
                 let b = tr[ti][i] * gr;
                 l[i] += a;

@@ -8,7 +8,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Roundi
 
 const HDR_W: f32 = 250.0;
 const RULER_H: f32 = 30.0;
-const TRACK_H: f32 = 84.0;
+const TRACK_H: f32 = 104.0; // Augmenté légèrement pour laisser de la place à la sous-piste d'automatisation
 
 enum Act {
     Select(usize),
@@ -18,6 +18,7 @@ enum Act {
     Pan(usize, f32),
     Delete(usize),
     Inst(usize, Instrument),
+    AddAutomationPoint(usize, String, f64, f32), // NOUVEAU: pour ajouter un point d'automation au clic
 }
 
 fn fader(ui: &mut egui::Ui, id: egui::Id, rect: Rect, v: f32, lo: f32, hi: f32, color: Color32) -> Option<f32> {
@@ -132,12 +133,13 @@ impl App {
         }
         let free = ui.input(|i| i.modifiers.alt); // hold Alt: no snapping
         let snap = |b: f64| if free { b } else { (b / grid).round() * grid };
+        
+        let mut acts: Vec<Act> = Vec::new();
+
         if lr.drag_started() {
-            // use where the mouse went down, not where it is after the drag threshold
             let origin = ui.input(|i| i.pointer.press_origin()).or_else(|| lr.interact_pointer_pos());
             if let Some(p) = origin {
                 if let Some((t, c, left)) = edge_at(&self.project, p) {
-                    // grab a clip edge: shorten / lengthen
                     self.checkpoint();
                     self.select_clip(t, c);
                     self.edge_orig = Some(self.project.tracks[t].clips[c].clone());
@@ -153,7 +155,6 @@ impl App {
                         let ti = ti as usize;
                         self.sel_track = ti;
                         if self.pen && matches!(self.project.tracks[ti].kind, TrackKind::Instrument(_)) {
-                            // pen: press and drag on an empty lane draws a clip
                             self.checkpoint();
                             let start = ((beat_at(p.x) / grid).floor() * grid).max(0.0);
                             let clip = Clip { name: "Clip".into(), start, len: grid.max(0.25), kind: ClipKind::Midi(Vec::new()) };
@@ -177,7 +178,6 @@ impl App {
                         self.push();
                     }
                     Drag::ClipEdge { t, c, left } => {
-                        // always computed from the clip as it was when the drag began
                         if let Some(orig) = self.edge_orig.clone() {
                             let b = snap(beat_at(p.x)).max(0.0);
                             if let Some(nc) = crate::edit::resize_clip(&orig, left, b, bpm, sr) {
@@ -196,28 +196,40 @@ impl App {
             self.drag = Drag::None;
             self.edge_orig = None;
         }
-        if lr.clicked() {
+       if lr.clicked() {
             if let Some(p) = lr.interact_pointer_pos() {
                 let ctrl = ui.input(|i| i.modifiers.command);
-                if let Some((t, c)) = clip_at(&self.project, p) {
-                    self.select_clip(t, c);
-                    if ctrl {
-                        // Ctrl+click cuts the clip at the pointer
-                        if let Err(e) = self.split_clip_at(t, c, snap(beat_at(p.x))) {
-                            self.status = format!("Cannot cut: {e}");
-                        }
-                    }
-                } else {
-                    let ti = track_at(p.y);
-                    if ti >= 0 && (ti as usize) < nt {
-                        let ti = ti as usize;
+                let ti = track_at(p.y);
+                
+                if ti >= 0 && (ti as usize) < nt {
+                    let ti = ti as usize;
+                    let track_top = lanes.top() + ti as f32 * TRACK_H - sy;
+                    let auto_zone_top = track_top + TRACK_H - 30.0;
+                    
+                    // 1. On vérifie d'abord si on clique dans le bandeau d'automatisation en bas de la piste
+                    if p.y >= auto_zone_top {
                         self.sel_track = ti;
-                        self.sel_clip = None;
-                        self.sel_note = None;
+                        let b = beat_at(p.x).max(0.0);
+                        let local_y = (p.y - auto_zone_top) / 26.0;
+                        let val = (1.0 - local_y).clamp(0.0, 1.0);
+                        acts.push(Act::AddAutomationPoint(ti, "volume".to_string(), b, val));
+                    } 
+                    // 2. Sinon, on gère les clips normalement
+                    else if let Some((t, c)) = clip_at(&self.project, p) {
+                        self.select_clip(t, c);
+                        if ctrl {
+                            if let Err(e) = self.split_clip_at(t, c, snap(beat_at(p.x))) {
+                                self.status = format!("Cannot cut: {e}");
+                            }
+                        }
+                    } else {
+                        self.sel_track = ti;
                         if self.pen {
-                            // pen: a single click on an empty lane creates a 4-beat clip
                             let start = (beat_at(p.x) / 4.0).floor().max(0.0) * 4.0;
                             self.add_clip(ti, start, 4.0);
+                        } else {
+                            self.sel_clip = None;
+                            self.sel_note = None;
                         }
                     }
                 }
@@ -245,6 +257,7 @@ impl App {
         p.rect_filled(rect, 14.0, Color32::WHITE);
         p.rect_stroke(rect, 14.0, stroke(1.0, HAIR));
         let lp = ui.painter_at(lanes);
+        
         for i in 0..nt {
             let y = lanes.top() + i as f32 * TRACK_H - sy;
             let r = Rect::from_min_size(pos2(lanes.left(), y), vec2(lanes.width(), TRACK_H));
@@ -257,7 +270,14 @@ impl App {
             };
             lp.rect_filled(r, 0.0, col);
             lp.line_segment([pos2(r.left(), r.bottom()), pos2(r.right(), r.bottom())], stroke(1.0, HAIR));
+            
+            // Dessiner la sous-piste d'automatisation (bandeau en bas de chaque piste)
+            let auto_rect = Rect::from_min_size(pos2(lanes.left(), y + TRACK_H - 30.0), vec2(lanes.width(), 30.0));
+            lp.rect_filled(auto_rect, 0.0, Color32::from_rgb(242, 242, 247));
+            lp.line_segment([auto_rect.min, pos2(auto_rect.right(), auto_rect.top())], stroke(1.0, HAIR));
+            lp.text(pos2(auto_rect.left() + 6.0, auto_rect.center().y), Align2::LEFT_CENTER, "Vol Automation", FontId::proportional(10.0), GREY);
         }
+
         let rp = ui.painter_at(ruler);
         let b0 = sx.floor() as i64;
         let b1 = (sx + visible).ceil() as i64;
@@ -277,17 +297,38 @@ impl App {
             p.text(lanes.center(), Align2::CENTER_CENTER, "Add an instrument from the left to begin", FontId::proportional(15.0), GREY);
         }
 
-        // clips
+        // clips and automation curves
         let spb = 60.0 / bpm * sr as f64;
         for (ti, t) in self.project.tracks.iter().enumerate() {
             let y = lanes.top() + ti as f32 * TRACK_H - sy;
             let col = PALETTE[t.color % 8];
+            
+            // --- DESSIN DES COURBES D'AUTOMATISATION ---
+            let auto_rect = Rect::from_min_size(pos2(lanes.left(), y + TRACK_H - 30.0), vec2(lanes.width(), 26.0));
+            if let Some(lane) = t.automations.iter().find(|l| l.parameter_id == "volume") {
+                if !lane.points.is_empty() {
+                    let ap = lp.with_clip_rect(auto_rect);
+                    let mut prev_pos: Option<Pos2> = None;
+                    for pt in &lane.points {
+                        let px = bx(pt.beat);
+                        let py = auto_rect.bottom() - pt.value * auto_rect.height();
+                        let curr_pos = pos2(px, py);
+                        
+                        if let Some(prev) = prev_pos {
+                            ap.line_segment([prev, curr_pos], stroke(1.5, ACCENT));
+                        }
+                        ap.circle_filled(curr_pos, 3.5, ACCENT);
+                        prev_pos = Some(curr_pos);
+                    }
+                }
+            }
+
             for (ci, c) in t.clips.iter().enumerate() {
                 let (x0, x1) = (bx(c.start), bx(c.start + c.len_beats(bpm, sr)));
                 if x1 < lanes.left() || x0 > lanes.right() {
                     continue;
                 }
-                let cr = Rect::from_min_max(pos2(x0, y + 7.0), pos2(x1, y + TRACK_H - 7.0));
+                let cr = Rect::from_min_max(pos2(x0, y + 7.0), pos2(x1, y + TRACK_H - 37.0)); // Ajusté pour laisser la place à l'automation en bas
                 let cp = lp.with_clip_rect(cr.intersect(lanes));
                 cp.rect_filled(cr, 8.0, tint(col, 64));
                 let hdr = Rect::from_min_size(cr.min, vec2(cr.width(), 18.0));
@@ -333,7 +374,6 @@ impl App {
                 }
                 if self.sel_clip == Some((ti, ci)) {
                     cp.rect_stroke(cr, 8.0, stroke(2.0, INK));
-                    // grips: drag these edges to shorten or lengthen the clip
                     for gx in [cr.left() + 3.5, cr.right() - 3.5] {
                         cp.rect_filled(Rect::from_center_size(pos2(gx, cr.center().y + 8.0), vec2(3.0, 20.0)), 1.5, INK);
                     }
@@ -342,7 +382,6 @@ impl App {
         }
 
         // track headers
-        let mut acts: Vec<Act> = Vec::new();
         for (i, t) in self.project.tracks.iter().enumerate() {
             let y = rect.top() + RULER_H + i as f32 * TRACK_H - sy;
             if y < rect.top() + RULER_H - 1.0 || y + TRACK_H > rect.bottom() + 1.0 {
@@ -408,6 +447,7 @@ impl App {
                 acts.push(Act::Pan(i, v));
             }
         }
+
         for a in acts {
             match a {
                 Act::Select(i) => {
@@ -441,6 +481,21 @@ impl App {
                     t.kind = TrackKind::Instrument(inst);
                     t.name = inst.name().into();
                     self.push();
+                }
+                Act::AddAutomationPoint(track_idx, param_id, beat, val) => {
+                    self.checkpoint();
+                    let track = &mut self.project.tracks[track_idx];
+                    if let Some(lane) = track.automations.iter_mut().find(|l| l.parameter_id == param_id) {
+                        lane.points.push(AutomationPoint { beat, value: val });
+                        lane.points.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap());
+                    } else {
+                        track.automations.push(AutomationLane {
+                            parameter_id: param_id,
+                            points: vec![AutomationPoint { beat, value: val }],
+                        });
+                    }
+                    self.push();
+                    self.status = "Automation point added.".into();
                 }
             }
         }
@@ -479,7 +534,6 @@ impl App {
 }
 
 impl App {
-    /// New empty MIDI clip on an instrument track (used by the pen). False on audio tracks.
     pub fn add_clip(&mut self, ti: usize, start: f64, len: f64) -> bool {
         if !matches!(self.project.tracks.get(ti).map(|t| t.kind), Some(TrackKind::Instrument(_))) {
             return false;
@@ -494,7 +548,6 @@ impl App {
 }
 
 impl App {
-    /// Called when an instrument dragged from the browser is released at `pos`.
     pub fn drop_instrument(&mut self, inst: Instrument, pos: Pos2) {
         if !self.arr_rect.contains(pos) {
             return;
