@@ -6,7 +6,7 @@ use crate::midi_in::MidiMsg;
 use crate::project::*;
 use crate::theme::*;
 use crate::App;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId};
+use eframe::egui::{self, pos2, vec2, Align2, FontId};
 use std::time::Instant;
 
 /// Number of beats (and of numbers shown on screen) in the count-in.
@@ -57,6 +57,20 @@ impl App {
     fn begin_take(&mut self, from: f64) {
         self.engine.set_pos(from, self.project.bpm, self.project.sr);
         self.engine.toggle_play();
+
+        // Création immédiate du clip sur la timeline dès le début de l'enregistrement
+        let origin = (from / 4.0).floor() * 4.0;
+        self.checkpoint();
+        self.project.tracks[self.sel_track].clips.push(Clip {
+            name: "Recording".into(),
+            start: origin,
+            len: 4.0, // Longueur de départ initiale
+            kind: ClipKind::Midi(Vec::new()),
+        });
+        let clip_idx = self.project.tracks[self.sel_track].clips.len() - 1;
+        self.select_clip(self.sel_track, clip_idx);
+        self.push();
+
         self.rec = RecState::Recording { from, track: self.sel_track, notes: Vec::new(), held: Vec::new() };
         self.status = "Recording... play your notes. Press R or Space to stop.".into();
     }
@@ -71,6 +85,20 @@ impl App {
     /// Called every frame: fires the clicks and starts the take when the count-in is over.
     pub fn rec_tick(&mut self, ctx: &egui::Context) {
         let bpm = self.project.bpm;
+
+        // Allongement dynamique du clip en direct pendant l'enregistrement (style Ableton)
+        if let RecState::Recording { from, track, .. } = &self.rec {
+            let pos = self.pos_beats;
+            let origin = (from / 4.0).floor() * 4.0;
+            if let Some(clip) = self.project.tracks.get_mut(*track).and_then(|t| t.clips.last_mut()) {
+                let new_len = (((pos - origin) / 4.0).ceil() * 4.0).max(4.0);
+                if (clip.len - new_len).abs() > 1e-5 {
+                    clip.len = new_len;
+                    ctx.request_repaint();
+                }
+            }
+        }
+
         let (clicks, start) = match &mut self.rec {
             RecState::CountIn { t0, next, from } => {
                 let el = t0.elapsed().as_secs_f64() * bpm / 60.0;
@@ -110,16 +138,12 @@ impl App {
                 let (rect, resp) = ui.allocate_exact_size(screen.size(), egui::Sense::click());
                 let p = ui.painter();
                 
-                // Aucun fond dessiné ici : ton DAW reste 100% visible !
-                
                 let c = rect.center();
 
-                // the number pops in big and shrinks / fades during its beat
                 let size = 340.0 - 90.0 * frac;
                 let col = ACCENT.gamma_multiply(1.0 - 0.35 * frac);
                 p.text(pos2(c.x, c.y - 40.0), Align2::CENTER_CENTER, number.to_string(), FontId::proportional(size), col);
 
-                // one dot per beat
                 let gap = 30.0;
                 let x0 = c.x - gap * (COUNT_IN_BEATS as f32 - 1.0) / 2.0;
                 for i in 0..COUNT_IN_BEATS {
@@ -169,25 +193,30 @@ impl App {
         if self.playing {
             self.engine.toggle_play();
         }
-        if notes.is_empty() || track >= self.project.tracks.len() {
+        if track >= self.project.tracks.len() {
             self.status = "Nothing recorded.".into();
             return;
         }
-        let origin = (from / 4.0).floor() * 4.0; // the clip starts on a bar line
+
+        let origin = (from / 4.0).floor() * 4.0;
         for n in notes.iter_mut() {
             n.start = (n.start - origin).max(0.0);
         }
-        let end = notes.iter().map(|n| n.start + n.len).fold(0.0, f64::max);
-        let len = ((end / 4.0).ceil() * 4.0).max(4.0);
-        let count = notes.len();
-        self.checkpoint();
-        self.project.tracks[track].clips.push(Clip { name: "Recording".into(), start: origin, len, kind: ClipKind::Midi(notes) });
-        let c = self.project.tracks[track].clips.len() - 1;
-        self.select_clip(track, c);
-        self.push();
-        self.status = format!("Recorded {count} notes. Ctrl+Z to undo.");
-    }
 
+        let count = notes.len();
+
+        // Le clip reste TOUJOURS sur la timeline, qu'il y ait des notes ou non (plus aucun effacement)
+        if let Some(clip) = self.project.tracks[track].clips.last_mut() {
+            if !notes.is_empty() {
+                let end = notes.iter().map(|n| n.start + n.len).fold(0.0, f64::max);
+                clip.len = ((end / 4.0).ceil() * 4.0).max(4.0);
+            }
+            clip.kind = ClipKind::Midi(notes);
+        }
+
+        self.push();
+        self.status = format!("Recording finished. Recorded {count} notes. Ctrl+Z to undo.");
+    }
     /// Handles queued MIDI messages (called every frame).
     pub fn midi_poll(&mut self) {
         for m in self.midi.drain() {

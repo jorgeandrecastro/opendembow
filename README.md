@@ -2,6 +2,7 @@
 
 ![OpenDembow Interface](images/image1.png)
 ![OpenDembow Interface](images/image2.png)
+![OpenDembow Interface](images/image3.png)
 
 A modern, elegant digital audio workstation written in Rust. Clean light interface, one accent colour,
 rounded everything.

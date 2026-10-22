@@ -666,6 +666,7 @@ impl App {
                     ("Ctrl+S / Ctrl+O", "Save / open project"),
                     ("Ctrl+I / Ctrl+E", "Import audio / export mixdown"),
                     ("Pinch or Ctrl+wheel", "Zoom the timeline or piano roll"),
+                    ("R", "Record: starts recording immediately into a live-expanding clip; R or Space to stop"),
                     ("F1", "This window"),
                 ];
 
