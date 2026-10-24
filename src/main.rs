@@ -1,4 +1,4 @@
-//! OpenDembow 0.7 - a modern, elegant DAW.
+//! OpenDembow 0.8 - a modern, elegant DAW.
 
 mod arrangement;
 mod audio_io;
@@ -71,6 +71,8 @@ struct App {
     sel_track: usize,
     sel_clip: Option<(usize, usize)>,
     sel_note: Option<usize>,
+    /// Multi-selection of notes in the piano roll (the last one is `sel_note`).
+    sel_notes: Vec<usize>,
     // arrangement view
     ppb: f32,
     scroll_x: f64,
@@ -160,6 +162,7 @@ impl App {
             sel_track: 0,
             sel_clip: None,
             sel_note: None,
+            sel_notes: Vec::new(),
             ppb: 36.0,
             scroll_x: 0.0,
             scroll_y: 0.0,
@@ -219,6 +222,7 @@ impl App {
             }
         }
         self.sel_note = None;
+        self.sel_notes.clear();
     }
 
     fn undo(&mut self) {
@@ -257,6 +261,17 @@ impl App {
         self.notes_ref(t, c).map(|_| (t, c))
     }
 
+    /// Indices of the selected notes (multi-selection, or the single selected note), sorted and deduplicated.
+    fn selected_note_indices(&self) -> Vec<usize> {
+        let mut sel = self.sel_notes.clone();
+        if sel.is_empty() {
+            sel.extend(self.sel_note);
+        }
+        sel.sort_unstable();
+        sel.dedup();
+        sel
+    }
+
     fn fit_clip(&mut self, t: usize, c: usize) {
         let end = self.notes_ref(t, c).map_or(0.0, |n| n.iter().map(|x| x.start + x.len).fold(0.0, f64::max));
         if let Some(clip) = self.project.tracks.get_mut(t).and_then(|tr| tr.clips.get_mut(c)) {
@@ -268,6 +283,7 @@ impl App {
         self.sel_track = t;
         self.sel_clip = Some((t, c));
         self.sel_note = None;
+        self.sel_notes.clear();
         self.pr_scroll = 0.0;
         let avg = self.notes_ref(t, c).and_then(|n| {
             if n.is_empty() {
@@ -288,6 +304,8 @@ impl App {
         self.project.tracks.push(Track::new(inst.name(), TrackKind::Instrument(inst), color));
         self.sel_track = self.project.tracks.len() - 1;
         self.sel_clip = None;
+        self.sel_note = None;
+        self.sel_notes.clear();
         self.push();
         self.status = format!("Added track: {}. Double-click its lane to create a clip.", inst.name());
     }
@@ -315,29 +333,35 @@ impl App {
         }
     }
 
+    /// Delete the selected notes (all of the multi-selection), or else the selected clip.
     fn delete_selected(&mut self) {
-        match (self.sel_clip, self.sel_note) {
-            (Some((t, c)), Some(i)) => {
-                self.checkpoint();
-                if let Some(n) = self.notes_mut(t, c) {
+        let Some((t, c)) = self.sel_clip else { return };
+        let sel = self.selected_note_indices();
+        self.checkpoint();
+        if sel.is_empty() {
+            if t < self.project.tracks.len() && c < self.project.tracks[t].clips.len() {
+                self.project.tracks[t].clips.remove(c);
+            }
+            self.sel_clip = None;
+        } else {
+            if let Some(n) = self.notes_mut(t, c) {
+                for &i in sel.iter().rev() {
                     if i < n.len() {
                         n.remove(i);
                     }
                 }
-                self.sel_note = None;
-                self.push();
             }
-            (Some((t, c)), None) => {
-                self.checkpoint();
-                self.project.tracks[t].clips.remove(c);
-                self.sel_clip = None;
-                self.push();
-            }
-            _ => {}
+            self.sel_note = None;
+            self.sel_notes.clear();
         }
+        self.push();
     }
 
+    /// Ctrl+D: duplicate the selected notes if there are any, otherwise the selected clip.
     fn duplicate_clip(&mut self) {
+        if self.duplicate_notes() {
+            return;
+        }
         if let Some((t, c)) = self.sel_clip {
             self.checkpoint();
             let mut copy = self.project.tracks[t].clips[c].clone();

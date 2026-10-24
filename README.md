@@ -1,4 +1,4 @@
-# OpenDembow 0.7
+# OpenDembow 0.8
 
 ![OpenDembow Interface](images/image1.png)
 ![OpenDembow Interface](images/image2.png)
@@ -18,15 +18,27 @@ Dependencies to add to `Cargo.toml`:
 
 ```toml
 serde_json = "1"   # MCP server
-midir = "0.10"     # MIDI input (new in 0.7)
+midir = "0.10"     # MIDI input (0.7)
 ```
+
+## What's new in 0.8
+**Ableton-style note editing in the piano roll**
+- **Multi-selection**: drag a rectangle on empty space, `Shift+click` to add / remove notes, `Ctrl+A` to select all, `Esc` to deselect
+- **Group editing**: moving or resizing a selected note moves or resizes the whole selection, keeping intervals and spacing
+- **Alt = no snap**: hold `Alt` while dragging, drawing or resizing to ignore the grid
+- **Keyboard editing**: `↑ ↓` transpose by a semitone, `Shift+↑ ↓` by an octave, `← →` nudge by one grid step, `Shift+← →` change note length
+- **Quantize** (`Ctrl+U`): snap the start of the selected notes to the grid
+- **Duplicate** (`Ctrl+D`): copies the selected notes right after themselves (with no note selected, it duplicates the clip as before)
+- **Velocity lane**: a bar per note under the grid; drag a bar to change its velocity, and the whole selection follows
+- **Copy / cut / paste several notes** at once; pasted notes become the selection, and the pen's Size setting applies to every selected note
+- Right-click on a selected note deletes the whole selection
 
 ## Features
 - **33 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, Drums & Percussion
-- **Recording with count-in** (new in 0.7): press `R` or the red button, hear a 4-beat count-in, then play - the notes you play become a new MIDI clip (undo with Ctrl+Z)
-- **MIDI input** (new in 0.7): plug in a MIDI keyboard or controller and pick it in Track > MIDI Input; it plays the selected track and records like the computer keyboard
-- **Drum names in the piano roll** (new in 0.7): on a drum track every row shows the name of its pad (Kick, Snare, Closed hat, Conga slap...), following the map of the kit
-- **Favourite instruments** (new in 0.7): click the star on an instrument, then use the ★ Favourites filter in the browser; favourites are saved in `~/.opendembow_favorites`
+- **Recording with count-in** (0.7): press `R` or the red button, hear a 4-beat count-in, then play - the notes you play become a new MIDI clip (undo with Ctrl+Z)
+- **MIDI input** (0.7): plug in a MIDI keyboard or controller and pick it in Track > MIDI Input; it plays the selected track and records like the computer keyboard
+- **Drum names in the piano roll** (0.7): on a drum track every row shows the name of its pad (Kick, Snare, Closed hat, Conga slap...), following the map of the kit
+- **Favourite instruments** (0.7): click the star on an instrument, then use the ★ Favourites filter in the browser; favourites are saved in `~/.opendembow_favorites`
 - **Drums** (0.6): five kits - **Drum Kit** (acoustic style), **808 Kit** (electronic), **Trap Kit**, **Reggaeton Kit** (dembow) and **Latin Percussion** (congas, bongos, timbales, shakers) - played with a General MIDI style note map (see below)
 - **Instruments added in 0.6**: 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - Ableton-style instrument browser: search box, category filters, favourites, instruments grouped by category, and the instrument of the selected track highlighted
@@ -42,8 +54,8 @@ midir = "0.10"     # MIDI input (new in 0.7)
 - Menu bar (File / Edit / Track / Help) and a "?" help button (F1)
 - Save / open projects (`.dembow`), undo / redo (Edit menu, Ctrl+Z)
 - Export: mixdown WAV, stems (one WAV per track), MIDI file
-- **Volume Automation** (new): click directly in the dedicated bottom lane of any track to add automation points and draw smooth volume curves.
-- **Scale-Aware Piano Roll** (new): select a root note and scale (Major, Minor, Pentatonic, Blues) to instantly color in-scale notes with an Ableton-like subtle green tint, shade out-of-scale notes, and guide composition with key labels.
+- **Volume Automation** (0.7): click directly in the dedicated bottom lane of any track to add automation points and draw smooth volume curves.
+- **Scale-Aware Piano Roll** (0.7): select a root note and scale (Major, Minor, Pentatonic, Blues) to instantly color in-scale notes with an Ableton-like subtle green tint, shade out-of-scale notes, and guide composition with key labels.
 
 ## Recording and MIDI input
 1. Select an instrument track (click its header, or drop an instrument on the timeline).
@@ -52,7 +64,26 @@ midir = "0.10"     # MIDI input (new in 0.7)
 4. Play: on the on-screen keyboard, your computer keys or the MIDI controller. The rest of the song plays along.
 5. Press `R` or `Space` to stop. A new clip called "Recording" appears on the track, starting on a bar line.
 
-Notes: the velocity of a MIDI controller is stored in the clip but not yet used by the live sound; there is no quantization yet (edit with the piano roll grid).
+Notes: the velocity of a MIDI controller is stored in the clip but not yet used by the live sound; there is no automatic quantization while recording, but you can quantize afterwards in the piano roll (select the notes, `Ctrl+U`).
+
+## Piano roll
+Select a MIDI clip (or double-click an empty lane to create one) to edit its notes in the bottom panel.
+
+**Drawing and selecting**
+- Double-click, or use the pen (`P`) and click / drag, to draw a note; the pen's Grid and Size menus set the snap and the length
+- Drag on empty space to draw a selection rectangle; `Shift` keeps the current selection
+- `Shift+click` a note to add or remove it; click a note to select only that one
+- Hold `Alt` to turn the grid snap off while dragging
+
+**Editing a selection**
+- Drag a note to move the whole selection; drag a note's left or right edge to resize (the right edge resizes the whole selection)
+- `↑ ↓` / `Shift+↑ ↓` transpose by a semitone / an octave, `← →` nudge by one grid step, `Shift+← →` change the length
+- `Ctrl+U` quantizes, `Ctrl+D` duplicates, `Delete` removes, `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste at the playhead
+- `Ctrl+click` a note cuts it at the click
+
+**Velocity lane**: the strip under the grid shows one bar per note. Drag a bar up or down to set the velocity; if the note is part of the selection, every selected note gets the same velocity.
+
+**Scale**: pick a root and a scale next to the clip name to highlight the notes of the scale (rows, keys and key labels).
 
 ## Drums
 Add a drum kit track (**Drum Kit**, **808 Kit**, **Trap Kit** or **Reggaeton Kit**) and play it with the on-screen keyboard, your computer keys or the piano roll.
@@ -97,11 +128,25 @@ The demo song contains a **dembow** beat on the Reggaeton Kit: kick on every bea
 | Key | Action |
 |---|---|
 | `R` | Record (count-in, then play; `R` or `Space` to stop) |
+| `P` | Pen mode on / off |
+| `Esc` | Leave pen mode, cancel a count-in, deselect notes |
 | `B` | Split the selected clip at the playhead |
 | `[` / `]` | Trim clip start / end to the playhead |
-| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste the selected note or clip (pasted at the playhead) |
-| `Ctrl+D` | Duplicate clip |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste the selected notes or clip (pasted at the playhead) |
+| `Ctrl+D` | Duplicate the selected notes (or the clip when no note is selected) |
+| `Delete` | Delete the selected notes (or the clip when no note is selected) |
 | `Click (Track automation lane)` | Add a volume automation point |
+
+Piano roll only (mouse over the roll):
+
+| Key | Action |
+|---|---|
+| `Ctrl+A` | Select all notes |
+| `Shift+click` / drag a rectangle | Add to the selection / select several notes |
+| `Alt` (held) | Disable the grid snap |
+| `↑ ↓` / `Shift+↑ ↓` | Transpose by a semitone / an octave |
+| `← →` / `Shift+← →` | Nudge by one grid step / change the note length |
+| `Ctrl+U` | Quantize the selected notes to the grid |
 
 Press F1 inside the app for all shortcuts.
 
@@ -126,13 +171,14 @@ A `.dembow` project is plain text (tab separated). Each track line is followed b
 Audio clips are stored next to the project as `<name>.audioN.wav`.
 
 Favourite instruments are not part of a project: they are stored per user in `~/.opendembow_favorites` (one instrument name per line).
+The piano roll's note selection and scale choice are not saved either.
 
 ## Layout
 - `engine.rs` real-time mixer (one effect chain per track), cpal output, offline bounce
 - `instruments.rs` synth voices and instrument categories - `project.rs` data model - `project_io.rs` save/load + MIDI export
 - `drums.rs` Drum Kit and 808 Kit - `drums_urban.rs` Trap Kit and Reggaeton Kit - `latin.rs` Latin Percussion - `extra_voices.rs` 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - `drum_names.rs` pad names shown in the piano roll (one map per kit family)
-- `arrangement.rs`, `pianoroll.rs`, `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites), `theme.rs` interface
+- `arrangement.rs`, `pianoroll.rs` (note editing, multi-selection, velocity lane, scales), `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites, help), `theme.rs` interface
 - `effects.rs` effect settings, DSP (`FxProcessor`) and the Mixer & Effects panel
 - `edit.rs` split / trim / clipboard / audio tools and the bottom-panel tabs
 - `record.rs` recording with count-in - `midi_in.rs` MIDI keyboard input (midir)
@@ -147,8 +193,8 @@ Favourite instruments are not part of a project: they are stored per user in `~/
 3. Write its sound in `Voice::next` (or in `extra_voices.rs` / `drums.rs` to keep files short).
 
 ## Roadmap
-Step sequencer, audio recording, recording quantization, MIDI velocity in the live sound, dark theme,
-sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects.
+Step sequencer, audio recording, quantization while recording, MIDI velocity in the live sound, fold-to-scale in the piano roll,
+dark theme, sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects.
 
 ## License
 

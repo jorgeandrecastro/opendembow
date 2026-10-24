@@ -249,7 +249,7 @@ impl App {
                     self.paste_clipboard();
                     ui.close_menu();
                 }
-                if ui.add_enabled(has_clip, egui::Button::new("Duplicate Clip").shortcut_text("Ctrl+D")).clicked() {
+                if ui.add_enabled(has_clip, egui::Button::new("Duplicate").shortcut_text("Ctrl+D")).clicked() {
                     self.duplicate_clip();
                     ui.close_menu();
                 }
@@ -348,7 +348,7 @@ impl App {
     pub fn ui_top(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("OpenDembow").size(18.0).strong());
-            ui.label(RichText::new("0.7").color(GREY));
+            ui.label(RichText::new("0.8").color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
@@ -639,29 +639,39 @@ impl App {
                 ui.label("7. File > Export to bounce your song to WAV, stems or MIDI.");
                 ui.label("8. Drums: pick Drum Kit, 808, Trap, Reggaeton Kit or Latin Percussion. The piano roll shows the name of every pad (C2 = kick, D2 = snare...).");
                 ui.label("9. Record: select an instrument track and press R (or the red button). After a 4-beat count-in, what you play becomes a new clip.");
+                ui.label("10. Piano roll: drag a rectangle to select several notes, then move, resize, transpose, copy or delete them together. Hold Alt to turn snapping off.");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
-                
+
                 let rows = [
-                   ("Space", "Play / pause (stops recording)"),
+                    ("Space", "Play / pause (stops recording)"),
                     ("R", "Record: count-in, then play; R or Space to stop"),
                     ("Home", "Rewind to start"),
                     ("M", "Metronome on / off (right-click it for options)"),
                     ("A W S E D F T G Y H U J K O L", "Play notes (piano layout)"),
                     ("Z / X", "Keyboard octave down / up"),
                     ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"),
-                    ("Ctrl+C / Ctrl+X / Ctrl+V", "Copy / cut / paste clip or note (at playhead)"),
-                    ("P / Esc", "Pen (draw / edit) mode on / off (Esc also cancels a count-in)"),
+                    ("Ctrl+C / Ctrl+X / Ctrl+V", "Copy / cut / paste selected notes or clip (at playhead)"),
+                    ("P", "Pen (draw / edit) mode on / off"),
+                    ("Esc", "Leave pen mode, cancel a count-in, deselect notes"),
                     ("B", "Split selected clip at the playhead"),
                     ("[  /  ]", "Trim clip start / end to the playhead"),
-                    ("Ctrl+D", "Duplicate selected clip"),
-                    ("Delete", "Delete selected note or clip"),
+                    ("Ctrl+D", "Duplicate selected notes (or the selected clip)"),
+                    ("Delete", "Delete selected notes (or the selected clip)"),
+                    // --- Piano roll ---
+                    ("Drag on empty space (roll)", "Selection rectangle (Shift = add to selection)"),
+                    ("Shift+click note", "Add / remove a note from the selection"),
+                    ("Ctrl+A (roll)", "Select all notes"),
+                    ("Drag note / note edge", "Move / resize the whole selection (Alt = no snap)"),
+                    ("↑ ↓  /  Shift+↑ ↓", "Transpose selected notes by a semitone / an octave"),
+                    ("← →  /  Shift+← →", "Nudge by one grid step / change note length"),
+                    ("Ctrl+U (roll)", "Quantize selected notes to the grid"),
+                    ("Velocity lane", "Drag a bar to set velocity (applies to the selection)"),
                     ("Pen + click / drag", "Draw a note (drag sets its length)"),
                     ("Double-click (arrow)", "Add a note"),
-                    ("Drag clip / note edge", "Shorten or lengthen (Alt = no snap)"),
                     ("Pen + drag on a lane", "Draw a clip of any length"),
                     ("Ctrl+click clip / note", "Cut it at the click (B cuts at the playhead)"),
-                    ("Right-click note", "Delete note"),
+                    ("Right-click note", "Delete note (or the whole selection)"),
                     ("Right-click track", "Change instrument / delete track"),
                     ("Click (Track automation lane)", "Add volume automation point"),
                     ("Ctrl+S / Ctrl+O", "Save / open project"),
