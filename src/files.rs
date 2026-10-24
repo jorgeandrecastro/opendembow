@@ -1,6 +1,4 @@
 //! File commands: new / open / save project, export mixdown, stems and MIDI.
-
-use crate::project::*;
 use crate::{audio_io, engine, project_io, App};
 
 impl App {

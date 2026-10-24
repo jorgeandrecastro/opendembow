@@ -23,6 +23,7 @@ mod project;
 mod project_io;
 mod record;
 mod theme;
+mod velocity;
 
 use eframe::egui::{self, Color32, Key, Rect};
 use engine::Engine;

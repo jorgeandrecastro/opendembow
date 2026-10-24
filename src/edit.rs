@@ -253,22 +253,16 @@ impl App {
 
     // ---------- clipboard ----------
 
-    /// Copy the selected notes (one or several), or else the selected clip.
+    /// Copy the selected note, or else the selected clip.
     pub fn copy_selection(&mut self) -> bool {
         let Some((t, c)) = self.sel_clip else {
             self.status = "Nothing selected to copy.".into();
             return false;
         };
-        let sel = self.selected_note_indices();
-        if !sel.is_empty() {
-            let notes: Vec<Note> = match self.notes_ref(t, c) {
-                Some(v) => sel.iter().filter_map(|&i| v.get(i).cloned()).collect(),
-                None => Vec::new(),
-            };
-            if !notes.is_empty() {
-                let n = notes.len();
-                self.clipboard = Some(Clipboard::Notes(notes));
-                self.status = if n == 1 { "Note copied.".into() } else { format!("{n} notes copied.") };
+        if let Some(i) = self.sel_note {
+            if let Some(n) = self.notes_ref(t, c).and_then(|v| v.get(i)).cloned() {
+                self.clipboard = Some(Clipboard::Notes(vec![n]));
+                self.status = "Note copied.".into();
                 return true;
             }
         }
@@ -301,21 +295,17 @@ impl App {
                 let rel = snap(self.pos_beats - start).max(0.0);
                 let base = ns.iter().map(|n| n.start).fold(f64::MAX, f64::min);
                 self.checkpoint();
-                let mut new_sel = Vec::new();
                 if let Some(v) = self.notes_mut(t, c) {
                     for n in &ns {
                         let mut n = n.clone();
                         n.start = rel + (n.start - base);
                         v.push(n);
-                        new_sel.push(v.len() - 1);
                     }
                 }
-                // the pasted notes become the selection
-                self.sel_note = new_sel.last().copied();
-                self.sel_notes = new_sel;
+                self.sel_note = self.notes_ref(t, c).map(|v| v.len() - 1);
                 self.fit_clip(t, c);
                 self.push();
-                self.status = if ns.len() == 1 { "Note pasted.".into() } else { format!("{} notes pasted.", ns.len()) };
+                self.status = "Note pasted.".into();
             }
             Some(Clipboard::Clip(clip)) => {
                 let want_midi = matches!(clip.kind, ClipKind::Midi(_));
@@ -439,22 +429,15 @@ impl App {
                     }
                 });
                 if (self.last_len - before).abs() > 1e-9 {
-                    // the chosen size also applies to every selected note
-                    if let Some((t, c)) = self.sel_clip {
-                        let sel = self.selected_note_indices();
-                        if !sel.is_empty() {
-                            let v = self.last_len;
-                            self.checkpoint();
-                            if let Some(notes) = self.notes_mut(t, c) {
-                                for &i in &sel {
-                                    if let Some(n) = notes.get_mut(i) {
-                                        n.len = v;
-                                    }
-                                }
-                            }
-                            self.fit_clip(t, c);
-                            self.push();
+                    // the chosen size also applies to the selected note
+                    if let (Some((t, c)), Some(i)) = (self.sel_clip, self.sel_note) {
+                        let v = self.last_len;
+                        self.checkpoint();
+                        if let Some(n) = self.notes_mut(t, c).and_then(|x| x.get_mut(i)) {
+                            n.len = v;
                         }
+                        self.fit_clip(t, c);
+                        self.push();
                     }
                 }
                 ui.menu_button("Clip", |ui| {

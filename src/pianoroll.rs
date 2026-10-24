@@ -6,7 +6,7 @@
 //! - Alt = désactive le magnétisme (snap)
 //! - Suppr/Retour arrière, Ctrl+D (dupliquer), Ctrl+U (quantifier), Échap
 //! - Flèches : ↑↓ demi-ton, Maj+↑↓ octave, ←→ pas de grille, Maj+←→ longueur
-//! - piste de vélocité en bas (glisser les barres, s'applique au groupe)
+//! - vélocité : badge « V » sur la note survolée / sélectionnée (voir velocity.rs)
 
 use crate::project::*;
 use crate::theme::*;
@@ -14,8 +14,7 @@ use crate::{App, Drag};
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, RichText, Rounding, Sense};
 
 const KEYS_W: f32 = 62.0;
-const ROW_H: f32 = 15.0;
-const VEL_H: f32 = 56.0;
+pub(crate) const ROW_H: f32 = 15.0;
 const MIN_LEN_FREE: f64 = 1.0 / 32.0;
 
 /// (label, length in beats): 1/32 ... whole note. Used for the grid and the note size.
@@ -59,13 +58,11 @@ struct RollState {
     marquee: Option<Pos2>,
     /// sélection de départ du rectangle (pour Maj)
     base: Vec<usize>,
-    /// note dont on édite la vélocité
-    vel_drag: Option<usize>,
 }
 
 impl Default for RollState {
     fn default() -> Self {
-        Self { scale: Scale::All, root: 0, sel: Vec::new(), marquee: None, base: Vec::new(), vel_drag: None }
+        Self { scale: Scale::All, root: 0, sel: Vec::new(), marquee: None, base: Vec::new() }
     }
 }
 
@@ -211,15 +208,13 @@ impl App {
 
         let (full, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
         let full = Rect::from_min_max(pos2(full.left() + 14.0, full.top()), full.right_bottom());
-        // zone principale + piste de vélocité
-        let rect = Rect::from_min_max(full.min, pos2(full.right(), (full.bottom() - VEL_H).max(full.top() + ROW_H)));
-        let vel_r = Rect::from_min_max(pos2(full.left() + KEYS_W, rect.bottom()), full.right_bottom());
+        // la grille occupe toute la hauteur (la vélocité passe par le badge « V »)
+        let rect = full;
         let keys_r = Rect::from_min_size(rect.min, vec2(KEYS_W, rect.height()));
         let grid = Rect::from_min_max(pos2(rect.left() + KEYS_W, rect.top()), rect.right_bottom());
         let rows = ((rect.height() / ROW_H).floor() as i32).max(1);
         let gr = ui.interact(grid, ui.id().with("roll"), Sense::click_and_drag());
         let kr = ui.interact(keys_r, ui.id().with("rollkeys"), Sense::click_and_drag());
-        let vr = ui.interact(vel_r, ui.id().with("rollvel"), Sense::click_and_drag());
 
         if gr.hovered() {
             let (zoom, scroll, hover) = ui.input(|i| (i.zoom_delta(), i.raw_scroll_delta, i.pointer.hover_pos()));
@@ -503,45 +498,6 @@ impl App {
             self.mouse_key = hk;
         }
 
-        // ------------------------------------------------------------ piste de vélocité
-        if vr.is_pointer_button_down_on() {
-            if let Some(p) = vr.interact_pointer_pos() {
-                if st.vel_drag.is_none() {
-                    // choisit la barre la plus proche du curseur
-                    let mut best: Option<(usize, f32)> = None;
-                    if let Some(v) = self.notes_ref(t, c) {
-                        for (i, n) in v.iter().enumerate() {
-                            let d = (gx(n.start) + 2.0 - p.x).abs();
-                            if d <= 7.0 && best.map_or(true, |(_, bd)| d <= bd) {
-                                best = Some((i, d));
-                            }
-                        }
-                    }
-                    if let Some((i, _)) = best {
-                        self.checkpoint();
-                        st.vel_drag = Some(i);
-                        if !st.sel.contains(&i) {
-                            st.sel = vec![i];
-                        }
-                    }
-                }
-                if let Some(i) = st.vel_drag {
-                    let v = ((vel_r.bottom() - 4.0 - p.y) / (VEL_H - 10.0)).clamp(0.03, 1.0);
-                    let group: Vec<usize> = if st.sel.contains(&i) { st.sel.clone() } else { vec![i] };
-                    if let Some(notes) = self.notes_mut(t, c) {
-                        for &k in &group {
-                            if let Some(n) = notes.get_mut(k) {
-                                n.vel = v;
-                            }
-                        }
-                    }
-                    self.push();
-                }
-            }
-        } else {
-            st.vel_drag = None;
-        }
-
         // ------------------------------------------------------------ raccourcis clavier
         if ui.rect_contains_pointer(full) && !ui.ctx().wants_keyboard_input() {
             let kc = |m: Modifiers, k: Key| ui.input_mut(|i| i.consume_key(m, k));
@@ -689,13 +645,11 @@ impl App {
         let b1 = (sx + (grid.width() / ppb) as f64).ceil() as i64;
         let steps = (1.0 / g).round().max(1.0) as i32;
         let show_sub = steps > 1 && ppb * (g as f32) >= 12.0;
-        let vp = ui.painter_at(vel_r);
         for b in b0..=b1 {
             let x = gx(b as f64);
             let bar = b.rem_euclid(4) == 0;
             let lc = if bar { Color32::from_rgb(205, 205, 212) } else { Color32::from_rgb(232, 232, 237) };
             gp.line_segment([pos2(x, grid.top()), pos2(x, grid.bottom())], stroke(1.0, lc));
-            vp.line_segment([pos2(x, vel_r.top()), pos2(x, vel_r.bottom())], stroke(1.0, lc));
             if show_sub {
                 for q in 1..steps {
                     let xq = gx(b as f64 + q as f64 * g);
@@ -708,34 +662,12 @@ impl App {
             gp.rect_filled(Rect::from_min_max(pos2(ex.max(grid.left()), grid.top()), grid.right_bottom()), 0.0, tint(INK, 12));
         }
 
-        // fond de la piste de vélocité
-        vp.line_segment([pos2(vel_r.left(), vel_r.top()), pos2(vel_r.right(), vel_r.top())], stroke(1.0, HAIR));
-        p.text(
-            pos2(full.left() + 8.0, vel_r.center().y),
-            Align2::LEFT_CENTER,
-            "Velocity",
-            FontId::proportional(10.5),
-            GREY,
-        );
-
         if let ClipKind::Midi(notes) = &clip.kind {
             for (i, n) in notes.iter().enumerate() {
-                let selected = st.sel.contains(&i);
-
-                // barre de vélocité (visible même hors de la vue verticale)
-                let vx = gx(n.start);
-                if vx >= grid.left() - 4.0 && vx <= grid.right() {
-                    let h = n.vel.clamp(0.0, 1.0) * (VEL_H - 10.0);
-                    let br = Rect::from_min_max(pos2(vx, vel_r.bottom() - 4.0 - h), pos2(vx + 4.0, vel_r.bottom() - 4.0));
-                    vp.rect_filled(br, Rounding::same(2.0), if selected { col } else { tint(col, 150) });
-                    if selected {
-                        vp.rect_stroke(br, Rounding::same(2.0), stroke(1.0, INK));
-                    }
-                }
-
                 if n.key as i32 > top || (n.key as i32) <= top - rows {
                     continue;
                 }
+                let selected = st.sel.contains(&i);
                 let y = grid.top() + (top - n.key as i32) as f32 * ROW_H;
                 let r = Rect::from_min_max(pos2(gx(n.start), y + 1.0), pos2(gx(n.start + n.len), y + ROW_H - 1.0));
                 let alpha = if selected { 255 } else { (110.0 + n.vel * 145.0) as u8 };
@@ -757,8 +689,15 @@ impl App {
         if hx >= grid.left() && hx <= grid.right() {
             let ph = stroke(2.0, RED);
             gp.line_segment([pos2(hx, grid.top()), pos2(hx, grid.bottom())], ph);
-            vp.line_segment([pos2(hx, vel_r.top()), pos2(hx, vel_r.bottom())], ph);
         }
+
+        // badge « V » + édition de la vélocité (velocity.rs)
+        let hover_note = ui
+            .input(|i| i.pointer.hover_pos())
+            .filter(|p| grid.contains(*p))
+            .and_then(|p| self.notes_ref(t, c).and_then(|n| hit(n, p)))
+            .map(|(i, _)| i);
+        self.velocity_overlay(ui, t, c, &st.sel, hover_note, grid, top, rows, &gx, col);
 
         // la note "principale" reste synchronisée avec le reste de l'app
         self.sel_note = st.sel.last().copied();
