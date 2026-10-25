@@ -417,7 +417,8 @@ impl App {
 
     /// One instrument row: tinted glyph tile, name, description, favourite star.
     fn browser_row(&mut self, ui: &mut egui::Ui, inst: Instrument) {
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::click_and_drag());
+        // la ligne ne réagit qu'au glisser : un simple clic dessus ne fait plus rien
+        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::drag());
         let resp = resp.on_hover_cursor(egui::CursorIcon::Grab);
         let fav = self.favs.contains(inst.name());
         // the star sits left of the "+" button and takes its own clicks
@@ -425,6 +426,11 @@ impl App {
         let sresp = ui
             .interact(Rect::from_center_size(star_c, vec2(22.0, 22.0)), ui.id().with(("star", inst.name())), Sense::click())
             .on_hover_text(if fav { "Remove from favourites" } else { "Add to favourites" });
+        // le « + » est le seul clic qui ajoute une piste
+        let plus_c = pos2(rect.right() - 20.0, rect.center().y);
+        let presp = ui
+            .interact(Rect::from_center_size(plus_c, vec2(24.0, 24.0)), ui.id().with(("plus", inst.name())), Sense::click())
+            .on_hover_text("Add as a new track (or drag it onto the timeline)");
         let row_hover = ui.rect_contains_pointer(rect);
         let current = matches!(
             self.project.tracks.get(self.sel_track).map(|t| t.kind),
@@ -447,8 +453,8 @@ impl App {
             draw_star(p, star_c, 7.5, None, GREY);
         }
         if row_hover && self.drag_inst.is_none() {
-            let c = pos2(rect.right() - 20.0, rect.center().y);
-            p.circle_filled(c, 10.0, ACCENT);
+            let c = plus_c;
+            p.circle_filled(c, if presp.hovered() { 11.5 } else { 10.0 }, ACCENT);
             p.line_segment([c - vec2(4.0, 0.0), c + vec2(4.0, 0.0)], stroke(1.6, Color32::WHITE));
             p.line_segment([c - vec2(0.0, 4.0), c + vec2(0.0, 4.0)], stroke(1.6, Color32::WHITE));
         }
@@ -461,10 +467,12 @@ impl App {
             crate::favorites::save(&self.favs);
             return;
         }
-        if resp.drag_started() {
+        // option 1 : glisser la ligne (déposer sur la timeline ajoute l'instrument)
+        if resp.dragged() && self.drag_inst.is_none() {
             self.drag_inst = Some(inst);
         }
-        if resp.clicked() {
+        // option 2 : cliquer sur le « + » ajoute l'instrument tout de suite
+        if presp.clicked() && self.drag_inst.is_none() {
             self.add_track(inst);
         }
     }
@@ -633,7 +641,7 @@ impl App {
             .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.label(RichText::new("Quick start").size(15.0).strong());
-                ui.label("1. Pick a category on the left, then drag an instrument onto the timeline (or click it). Click the star to keep it in your favourites.");
+                ui.label("1. Pick a category on the left, then drag an instrument onto the timeline (or click its + button: both add the instrument). Click the star to keep it in your favourites.");
                 ui.label("2. Double-click an empty lane to create a clip, then add notes in the piano roll.");
                 ui.label("3. Play any instrument live with the on-screen keyboard, your computer keys or a MIDI keyboard (Track > MIDI Input).");
                 ui.label("4. Press Space to play. Drag clips to move them. Use × on a track to delete it.");
@@ -680,6 +688,9 @@ impl App {
                     ("Ctrl+click clip / note", "Cut it at the click (B cuts at the playhead)"),
                     ("Right-click note", "Delete note (or the whole selection)"),
                     ("Right-click track", "Change instrument / delete track"),
+                    ("Drag a track header", "Reorder the tracks (a blue line shows where it goes)"),
+                    ("Drop an instrument on a track", "Replace its instrument, keeping every clip and note"),
+                    ("Drop an instrument between tracks", "Insert a new track at that spot (blue line)"),
                     ("Click / drag (automation lane)", "Add / move a volume automation point (right-click a point to delete it)"),
                     ("Ctrl+S / Ctrl+O", "Save / open project"),
                     ("Ctrl+I / Ctrl+E", "Import audio / export mixdown"),

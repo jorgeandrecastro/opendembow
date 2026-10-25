@@ -29,9 +29,31 @@ midir = "0.10"     # MIDI input (0.7)
 - **Keyboard editing**: `↑ ↓` transpose by a semitone, `Shift+↑ ↓` by an octave, `← →` nudge by one grid step, `Shift+← →` change note length
 - **Quantize** (`Ctrl+U`): snap the start of the selected notes to the grid
 - **Duplicate** (`Ctrl+D`): copies the selected notes right after themselves (with no note selected, it duplicates the clip as before)
-- **Velocity lane**: a bar per note under the grid; drag a bar to change its velocity, and the whole selection follows
+- **Velocity badge**: no more extra lane under the grid. Hover or select a note and a small **V** badge appears just after it; its fill shows the velocity at a glance, and a click opens a vertical slider (1-127). The whole selection follows
 - **Copy / cut / paste several notes** at once; pasted notes become the selection, and the pen's Size setting applies to every selected note
 - Right-click on a selected note deletes the whole selection
+
+**Loops, Ableton style**
+- A thin **loop bar** sits above the bar numbers. Drag in it to draw the part that repeats, drag the brace to move it, drag its edges to resize it (`Alt` = no snap)
+- The brace is amber when the loop is on and grey when it is off; the looped region is tinted on the timeline
+- Click the brace, press `Ctrl+L` or use the **Loop** button in the transport bar to switch it on or off; `Ctrl+Shift+L` loops the selected clip
+- Right-click the bar for more: loop the selected clip, or loop 1 / 2 / 4 / 8 bars from the playhead
+- The playhead jumps back at the end of the loop, carrying the tiny overshoot so the beat grid never drifts
+
+**Volume automation, redesigned**
+- Each track has a pink automation lane under its clips, separate from the clips (it no longer triggers clip moves or clip cursors)
+- **0 / 50 / 100 %** guides are always visible, and values snap to them (`Alt` = free)
+- A **ghost point** shows exactly where a click will place a point, with its value; points show their value on hover and while dragging
+- Click to add a point, drag a point to move it, right-click a point to delete it
+
+**Timeline and playhead**
+- The red playhead is now a real handle: open hand on hover, closed hand while dragging, in the ruler and in the lanes. It snaps to the grid (`Alt` = free) and shows its position (`bar.beat.sixteenth`) while you hover or drag it
+- Clicking or dragging in the ruler moves the playhead, with a hover guide that shows where it will land
+- Clips get a hand cursor and a light highlight on hover; empty instrument tracks show a "Double-click to create a clip" hint
+- Track headers are drawn even when only half visible (no more "ghost" tracks), and a scroll indicator appears when there are more tracks than room
+- Tooltips on Mute, Solo, volume, pan and delete; double-click the pan fader to centre it
+- **Reorder tracks**: drag a track header (open hand on hover); a blue line shows where the track will land
+- **Instrument drops**: dropping an instrument on the middle of a track swaps its instrument and keeps every clip and note (Ableton style); dropping near the edge between two tracks inserts a new track right there
 
 ## Features
 - **33 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, Drums & Percussion
@@ -54,7 +76,8 @@ midir = "0.10"     # MIDI input (0.7)
 - Menu bar (File / Edit / Track / Help) and a "?" help button (F1)
 - Save / open projects (`.dembow`), undo / redo (Edit menu, Ctrl+Z)
 - Export: mixdown WAV, stems (one WAV per track), MIDI file
-- **Volume Automation** (0.7): click directly in the dedicated bottom lane of any track to add automation points and draw smooth volume curves.
+- **Volume Automation** (0.7, redesigned in 0.8): click directly in the dedicated bottom lane of any track to add automation points and draw smooth volume curves (see above)
+- **Loops** (0.8): Ableton-style loop bar above the timeline (see above)
 - **Scale-Aware Piano Roll** (0.7): select a root note and scale (Major, Minor, Pentatonic, Blues) to instantly color in-scale notes with an Ableton-like subtle green tint, shade out-of-scale notes, and guide composition with key labels.
 
 ## Recording and MIDI input
@@ -81,9 +104,24 @@ Select a MIDI clip (or double-click an empty lane to create one) to edit its not
 - `Ctrl+U` quantizes, `Ctrl+D` duplicates, `Delete` removes, `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste at the playhead
 - `Ctrl+click` a note cuts it at the click
 
-**Velocity lane**: the strip under the grid shows one bar per note. Drag a bar up or down to set the velocity; if the note is part of the selection, every selected note gets the same velocity.
+**Velocity**: hover or select a note and click the **V** badge that appears right after it. A vertical slider (1-127) sets the velocity; if the note is part of the selection, every selected note gets the same value. The badge fill and the note's opacity both show the current velocity.
 
 **Scale**: pick a root and a scale next to the clip name to highlight the notes of the scale (rows, keys and key labels).
+
+## Loops
+1. Drag in the thin bar above the bar numbers to choose the part that repeats (it snaps to the beat; hold `Alt` for free positioning).
+2. Move the brace by dragging its body, resize it by dragging an edge.
+3. Click the brace, press `Ctrl+L` or press the **Loop** button to turn the loop on or off. `Ctrl+Shift+L` loops the selected clip.
+4. Right-click the bar to loop the selected clip or to loop 1 / 2 / 4 / 8 bars from the playhead.
+
+Notes: playback loops when the playhead crosses the end of the loop (checked once per frame, so the jump can be a few milliseconds late; the overshoot is carried over so the grid does not drift). Starting the playhead after the loop end plays on normally. The loop range is not saved in the project yet.
+
+## Automation
+Each track has a volume automation lane under its clips, with 0 / 50 / 100 % guides.
+- **Click** in the lane to add a point (a ghost point shows where it will land and its value)
+- **Drag** a point to move it; it stays between its neighbours and snaps to the grid and to 0 / 50 / 100 % (`Alt` = free)
+- **Right-click** a point to delete it
+- Before the first point and after the last one, the value stays flat
 
 ## Drums
 Add a drum kit track (**Drum Kit**, **808 Kit**, **Trap Kit** or **Reggaeton Kit**) and play it with the on-screen keyboard, your computer keys or the piano roll.
@@ -135,7 +173,12 @@ The demo song contains a **dembow** beat on the Reggaeton Kit: kick on every bea
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste the selected notes or clip (pasted at the playhead) |
 | `Ctrl+D` | Duplicate the selected notes (or the clip when no note is selected) |
 | `Delete` | Delete the selected notes (or the clip when no note is selected) |
-| `Click (Track automation lane)` | Add a volume automation point |
+| `Ctrl+L` | Loop on / off |
+| `Ctrl+Shift+L` | Loop the selected clip |
+| Drag in the loop bar | Draw / move / resize the loop (right-click for more) |
+| Click / drag in a track's automation lane | Add / move a volume automation point |
+| Right-click an automation point | Delete the point |
+| Drag the red playhead | Move the playhead (`Alt` = no snap) |
 
 Piano roll only (mouse over the roll):
 
@@ -147,6 +190,7 @@ Piano roll only (mouse over the roll):
 | `↑ ↓` / `Shift+↑ ↓` | Transpose by a semitone / an octave |
 | `← →` / `Shift+← →` | Nudge by one grid step / change the note length |
 | `Ctrl+U` | Quantize the selected notes to the grid |
+| Click the **V** badge of a note | Set the velocity of the note (or of the whole selection) |
 
 Press F1 inside the app for all shortcuts.
 
@@ -171,14 +215,16 @@ A `.dembow` project is plain text (tab separated). Each track line is followed b
 Audio clips are stored next to the project as `<name>.audioN.wav`.
 
 Favourite instruments are not part of a project: they are stored per user in `~/.opendembow_favorites` (one instrument name per line).
-The piano roll's note selection and scale choice are not saved either.
+The piano roll's note selection and scale choice are not saved either, and neither is the loop range.
 
 ## Layout
 - `engine.rs` real-time mixer (one effect chain per track), cpal output, offline bounce
 - `instruments.rs` synth voices and instrument categories - `project.rs` data model - `project_io.rs` save/load + MIDI export
 - `drums.rs` Drum Kit and 808 Kit - `drums_urban.rs` Trap Kit and Reggaeton Kit - `latin.rs` Latin Percussion - `extra_voices.rs` 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - `drum_names.rs` pad names shown in the piano roll (one map per kit family)
-- `arrangement.rs`, `pianoroll.rs` (note editing, multi-selection, velocity lane, scales), `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites, help), `theme.rs` interface
+- `arrangement.rs` timeline: track headers, ruler, clips, playhead - `loops.rs` loop bar, loop region and looping playback - `automation.rs` volume automation lanes
+- `pianoroll.rs` note editing, multi-selection, scales - `velocity.rs` the V badge and its velocity slider
+- `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites, help), `theme.rs` interface
 - `effects.rs` effect settings, DSP (`FxProcessor`) and the Mixer & Effects panel
 - `edit.rs` split / trim / clipboard / audio tools and the bottom-panel tabs
 - `record.rs` recording with count-in - `midi_in.rs` MIDI keyboard input (midir)
@@ -194,7 +240,8 @@ The piano roll's note selection and scale choice are not saved either.
 
 ## Roadmap
 Step sequencer, audio recording, quantization while recording, MIDI velocity in the live sound, fold-to-scale in the piano roll,
-dark theme, sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects.
+dark theme, sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects,
+sample-accurate looping inside the audio engine, saving the loop range in the project, more automation targets (pan, effects).
 
 ## License
 

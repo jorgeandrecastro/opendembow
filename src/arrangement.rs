@@ -23,6 +23,30 @@ enum Act {
     Pan(usize, f32),
     Delete(usize),
     Inst(usize, Instrument),
+    /// Déplace une piste (ancien index, nouvel index).
+    Move(usize, usize),
+}
+
+/// Où atterrit un instrument glissé depuis le navigateur.
+#[derive(Clone, Copy, PartialEq)]
+enum DropAt {
+    /// Remplace l'instrument de cette piste (les clips et les notes sont gardés).
+    Replace(usize),
+    /// Crée une nouvelle piste à cet emplacement (0 = tout en haut, nt = tout en bas).
+    Insert(usize),
+}
+
+/// Ligne d'insertion bleue entre deux pistes, avec une étiquette.
+fn draw_insert_line(p: &egui::Painter, rect: Rect, lanes: Rect, y: f32, label: &str) {
+    let y = y.clamp(lanes.top() + 1.0, rect.bottom() - 3.0);
+    let (x0, x1) = (rect.left() + 10.0, rect.right() - 10.0);
+    p.line_segment([pos2(x0, y), pos2(x1, y)], stroke(5.0, tint(ACCENT, 40)));
+    p.line_segment([pos2(x0, y), pos2(x1, y)], stroke(2.5, ACCENT));
+    p.circle_filled(pos2(x0, y), 4.5, ACCENT);
+    p.circle_filled(pos2(x1, y), 4.5, ACCENT);
+    let tag = Rect::from_min_size(pos2(lanes.left() + 14.0, (y - 22.0).max(lanes.top() + 2.0)), vec2(150.0, 18.0));
+    p.rect_filled(tag, 9.0, ACCENT);
+    p.text(tag.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), Color32::WHITE);
 }
 
 /// Position en « mesure.temps.double-croche », comme dans la barre de transport.
@@ -445,6 +469,8 @@ impl App {
         }
 
         // track headers : dessinés même à moitié visibles (rognés), pour qu'aucune piste ne reste « fantôme »
+        let reorder_id = egui::Id::new("track_reorder");
+        let reorder_from: Option<usize> = ui.ctx().data_mut(|d| d.get_temp::<Option<usize>>(reorder_id)).flatten();
         let hdr_area = Rect::from_min_max(pos2(rect.left(), lanes.top()), pos2(lanes.left(), rect.bottom()));
         let hp = ui.painter_at(hdr_area);
         let old_clip = ui.clip_rect();
@@ -456,9 +482,17 @@ impl App {
             }
             let hr = Rect::from_min_size(pos2(rect.left() + 8.0, y + 5.0), vec2(HDR_W - 16.0, TRACK_H - 10.0));
             let col = PALETTE[t.color % 8];
-            let hresp = ui.interact(hr, ui.id().with(("hdr", i)), Sense::click());
+            let hresp = ui.interact(hr, ui.id().with(("hdr", i)), Sense::click_and_drag());
             if hresp.clicked() {
                 acts.push(Act::Select(i));
+            }
+            // glisser l'en-tête pour changer l'ordre des pistes (main ouverte au survol)
+            if hresp.drag_started() {
+                ui.ctx().data_mut(|d| d.insert_temp(reorder_id, Some(i)));
+                acts.push(Act::Select(i));
+            }
+            if hresp.hovered() && reorder_from.is_none() {
+                ui.ctx().set_cursor_icon(CursorIcon::Grab);
             }
             hresp.context_menu(|ui| {
                 if ui.button("Delete track").clicked() {
@@ -513,9 +547,51 @@ impl App {
             if let Some(v) = fader(ui, ui.id().with(("p", i)), pr, t.pan, -1.0, 1.0, GREY, "Pan (double-click to center)", Some(0.0)) {
                 acts.push(Act::Pan(i, v));
             }
+            // la piste qu'on déplace est estompée
+            if reorder_from == Some(i) {
+                hp.rect_filled(hr, 12.0, tint(Color32::WHITE, 150));
+            }
         }
 
         ui.set_clip_rect(old_clip);
+
+        // ---- réorganiser les pistes : une ligne bleue montre où la piste ira ----
+        if let Some(from) = reorder_from {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            ui.ctx().request_repaint();
+            let released = ui.input(|i| i.pointer.any_released()) || !ui.input(|i| i.pointer.any_down());
+            match ui.input(|i| i.pointer.latest_pos()) {
+                Some(h) if !released => {
+                    let rel = (h.y - lanes.top() + sy) / TRACK_H;
+                    let gap = (rel.round() as i64).clamp(0, nt as i64) as usize;
+                    let to = if gap > from { gap - 1 } else { gap };
+                    if to != from {
+                        draw_insert_line(&p, rect, lanes, lanes.top() + gap as f32 * TRACK_H - sy, "Move track here");
+                    }
+                    if let Some(t) = self.project.tracks.get(from) {
+                        let gp = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("track_drag_ghost")));
+                        let r = Rect::from_min_size(h + vec2(14.0, 8.0), vec2(190.0, 40.0));
+                        gp.rect_filled(r.translate(vec2(0.0, 3.0)).expand(2.0), 14.0, Color32::from_black_alpha(28));
+                        gp.rect_filled(r, 12.0, Color32::WHITE);
+                        gp.rect_stroke(r, 12.0, stroke(1.5, ACCENT));
+                        gp.rect_filled(Rect::from_min_size(pos2(r.left() + 8.0, r.top() + 8.0), vec2(4.0, 24.0)), 2.0, PALETTE[t.color % 8]);
+                        gp.text(pos2(r.left() + 20.0, r.center().y), Align2::LEFT_CENTER, &t.name, FontId::proportional(13.0), INK);
+                    }
+                }
+                last => {
+                    // relâché : on déplace la piste (si la souris est encore dans la fenêtre)
+                    ui.ctx().data_mut(|d| d.insert_temp(reorder_id, None::<usize>));
+                    if let Some(h) = last {
+                        let rel = (h.y - lanes.top() + sy) / TRACK_H;
+                        let gap = (rel.round() as i64).clamp(0, nt as i64) as usize;
+                        let to = if gap > from { gap - 1 } else { gap };
+                        if to != from {
+                            acts.push(Act::Move(from, to));
+                        }
+                    }
+                }
+            }
+        }
 
         for a in acts {
             match a {
@@ -544,36 +620,50 @@ impl App {
                     self.fix_selection();
                     self.push();
                 }
-                Act::Inst(i, inst) => {
-                    self.checkpoint();
-                    let t = &mut self.project.tracks[i];
-                    t.kind = TrackKind::Instrument(inst);
-                    t.name = inst.name().into();
-                    self.push();
+                Act::Inst(i, inst) => self.replace_instrument(i, inst),
+                Act::Move(from, to) => {
+                    let n = self.project.tracks.len();
+                    if from != to && from < n && to < n {
+                        self.checkpoint();
+                        let tr = self.project.tracks.remove(from);
+                        self.project.tracks.insert(to, tr);
+                        // les sélections suivent les pistes
+                        let map = |i: usize| -> usize {
+                            if i == from {
+                                to
+                            } else if from < to && i > from && i <= to {
+                                i - 1
+                            } else if from > to && i >= to && i < from {
+                                i + 1
+                            } else {
+                                i
+                            }
+                        };
+                        self.sel_track = map(self.sel_track);
+                        if let Some((t, c)) = self.sel_clip {
+                            self.sel_clip = Some((map(t), c));
+                        }
+                        self.push();
+                        self.status = "Track moved.".into();
+                    }
                 }
             }
         }
 
-        // drop target while dragging an instrument from the browser
+        // cible du dépôt pendant qu'on glisse un instrument depuis le navigateur
         if self.drag_inst.is_some() {
             p.rect_stroke(rect, 14.0, stroke(2.0, ACCENT));
             if let Some(h) = ui.input(|i| i.pointer.latest_pos()) {
-                if rect.contains(h) {
-                    let ti = track_at(h.y);
-                    let on_inst = h.x >= lanes.left()
-                        && ti >= 0
-                        && (ti as usize) < nt
-                        && matches!(self.project.tracks[ti as usize].kind, TrackKind::Instrument(_));
-                    if on_inst {
+                match self.drop_target(h) {
+                    Some(DropAt::Replace(ti)) => {
                         let y = lanes.top() + ti as f32 * TRACK_H - sy;
                         lp.rect_filled(Rect::from_min_size(pos2(lanes.left(), y), vec2(lanes.width(), TRACK_H)), 0.0, tint(ACCENT, 30));
-                        lp.text(pos2(lanes.left() + 18.0, y + TRACK_H / 2.0), Align2::LEFT_CENTER, "Drop to replace this instrument", FontId::proportional(13.0), ACCENT);
-                    } else {
-                        let y = lanes.top() + nt as f32 * TRACK_H - sy;
-                        let r = Rect::from_min_size(pos2(lanes.left(), y), vec2(lanes.width(), TRACK_H));
-                        lp.rect_filled(r, 0.0, tint(ACCENT, 16));
-                        lp.text(r.center(), Align2::CENTER_CENTER, "Drop to create a new track", FontId::proportional(14.0), ACCENT);
+                        lp.text(pos2(lanes.left() + 18.0, y + TRACK_H / 2.0), Align2::LEFT_CENTER, "Drop to replace the instrument (notes are kept)", FontId::proportional(13.0), ACCENT);
                     }
+                    Some(DropAt::Insert(at)) => {
+                        draw_insert_line(&p, rect, lanes, lanes.top() + at as f32 * TRACK_H - sy, "New track here");
+                    }
+                    None => {}
                 }
             }
         }
@@ -633,37 +723,85 @@ impl App {
 }
 
 impl App {
-    pub fn drop_instrument(&mut self, inst: Instrument, pos: Pos2) {
-        if !self.arr_rect.contains(pos) {
-            return;
+    /// Où irait un instrument lâché à `pos` : remplacer (milieu d'une piste d'instrument),
+    /// insérer entre deux pistes (bords haut / bas d'une piste), ou annuler (à gauche de la timeline).
+    fn drop_target(&self, pos: Pos2) -> Option<DropAt> {
+        let arr = self.arr_rect;
+        if pos.x < arr.left() || pos.y < arr.top() {
+            return None;
         }
         let lanes = self.lanes_rect;
         let nt = self.project.tracks.len();
-        let ti = ((pos.y - lanes.top() + self.scroll_y) / TRACK_H).floor() as i64;
-        if pos.x >= lanes.left() && ti >= 0 && (ti as usize) < nt {
-            let ti = ti as usize;
-            if let TrackKind::Instrument(_) = self.project.tracks[ti].kind {
-                self.checkpoint();
-                let t = &mut self.project.tracks[ti];
-                t.kind = TrackKind::Instrument(inst);
+        let rel = (pos.y - lanes.top() + self.scroll_y) / TRACK_H;
+        if rel < 0.0 {
+            return Some(DropAt::Insert(0));
+        }
+        let ti = rel.floor() as usize;
+        if ti >= nt {
+            return Some(DropAt::Insert(nt));
+        }
+        let f = rel - ti as f32;
+        let is_inst = matches!(self.project.tracks[ti].kind, TrackKind::Instrument(_));
+        Some(if f < 0.25 {
+            DropAt::Insert(ti)
+        } else if f > 0.75 {
+            DropAt::Insert(ti + 1)
+        } else if is_inst {
+            DropAt::Replace(ti)
+        } else if f < 0.5 {
+            DropAt::Insert(ti)
+        } else {
+            DropAt::Insert(ti + 1)
+        })
+    }
+
+    /// Change l'instrument d'une piste en gardant ses clips et ses notes (comme dans Ableton).
+    /// Le nom de la piste ne change que s'il était celui de l'ancien instrument.
+    pub fn replace_instrument(&mut self, ti: usize, inst: Instrument) {
+        if ti >= self.project.tracks.len() {
+            return;
+        }
+        self.checkpoint();
+        let t = &mut self.project.tracks[ti];
+        if let TrackKind::Instrument(old) = t.kind {
+            if t.name == old.name() {
                 t.name = inst.name().into();
-                self.sel_track = ti;
-                self.push();
-                self.status = format!("Instrument changed to {}", inst.name());
-                return;
             }
         }
-        let beat = if pos.x >= lanes.left() {
-            ((((pos.x - lanes.left()) / self.ppb) as f64 + self.scroll_x) / 4.0).floor().max(0.0) * 4.0
-        } else {
-            0.0
-        };
+        t.kind = TrackKind::Instrument(inst);
+        self.sel_track = ti;
+        self.push();
+        self.status = format!("Instrument changed to {} - notes and clips are kept.", inst.name());
+    }
+
+    /// Nouvelle piste d'instrument à l'emplacement `at`, avec un clip vide de 4 temps à `beat`.
+    fn insert_track(&mut self, inst: Instrument, at: usize, beat: f64) {
+        let at = at.min(self.project.tracks.len());
         self.checkpoint();
-        let mut tr = Track::new(inst.name(), TrackKind::Instrument(inst), nt % 8);
+        let mut tr = Track::new(inst.name(), TrackKind::Instrument(inst), self.project.tracks.len() % 8);
         tr.clips.push(Clip { name: "Clip".into(), start: beat, len: 4.0, kind: ClipKind::Midi(Vec::new()) });
-        self.project.tracks.push(tr);
-        self.select_clip(nt, 0);
+        self.project.tracks.insert(at, tr);
+        self.select_clip(at, 0);
         self.push();
         self.status = format!("New track: {}", inst.name());
+    }
+
+    pub fn drop_instrument(&mut self, inst: Instrument, pos: Pos2) {
+        let Some(target) = self.drop_target(pos) else {
+            self.status = "Drop cancelled.".into();
+            return;
+        };
+        match target {
+            DropAt::Replace(ti) => self.replace_instrument(ti, inst),
+            DropAt::Insert(at) => {
+                let lanes = self.lanes_rect;
+                let beat = if pos.x >= lanes.left() {
+                    ((((pos.x - lanes.left()) / self.ppb) as f64 + self.scroll_x) / 4.0).floor().max(0.0) * 4.0
+                } else {
+                    0.0
+                };
+                self.insert_track(inst, at, beat);
+            }
+        }
     }
 }
