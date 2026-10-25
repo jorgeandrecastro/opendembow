@@ -332,6 +332,7 @@ impl App {
                     ui.close_menu();
                 }
             });
+            self.ui_view_menu(ui);
             ui.menu_button("Help", |ui| {
                 if ui.add(egui::Button::new("Help & Shortcuts").shortcut_text("F1")).clicked() {
                     self.show_help = true;

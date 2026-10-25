@@ -291,10 +291,33 @@ fn draw_spectrum(ui: &mut egui::Ui, tap: &Tap, size: Vec2, st: &mut Spec) {
     }
 }
 
-/// Small text toggle used in the card header.
-fn toggle(ui: &mut egui::Ui, on: bool, label: &str, tip: &str) -> bool {
-    let txt = RichText::new(label).size(11.0).color(if on { ACCENT } else { GREY });
-    ui.add(egui::Label::new(txt).sense(Sense::click())).on_hover_text(tip).clicked()
+/// Pill toggle for the card header: tinted when on, grey when off, with a real hit area.
+fn chip(ui: &mut egui::Ui, label: &str, on: bool, tip: &str) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(vec2(46.0, 22.0), Sense::click());
+    let hover = resp.hovered();
+    let (fill, fg) = if on {
+        (tint(ACCENT, if hover { 52 } else { 34 }), ACCENT)
+    } else {
+        (if hover { Color32::from_rgb(228, 228, 235) } else { Color32::from_rgb(240, 240, 245) }, GREY)
+    };
+    let p = ui.painter();
+    p.rect_filled(rect, 11.0, fill);
+    p.text(rect.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.5), fg);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip).clicked()
+}
+
+/// Peak read-out in the card header; a click resets every peak and the clip LEDs.
+fn peak_readout(ui: &mut egui::Ui, pk: f32) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(66.0, 22.0), Sense::click());
+    let hover = resp.hovered();
+    let col = if pk >= 0.0 { RED } else { GREY };
+    if hover {
+        ui.painter().rect_filled(rect, 11.0, Color32::from_rgb(240, 240, 245));
+    }
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, format!("{:+.1} dB", pk), FontId::proportional(11.5), col);
+    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Highest peak. Click to reset").clicked() {
+        meters::reset_all(ui.ctx());
+    }
 }
 
 /// "Master" card: spectrum + stereo dBFS meters, `w` x `h` pixels.
@@ -318,16 +341,14 @@ pub fn master_panel(ui: &mut egui::Ui, tap: &Tap, w: f32, h: f32) {
                     ui.label(RichText::new("Master").strong().size(13.0));
                     let pk = meters::peak_db(ui.ctx(), meters::MASTER_L).max(meters::peak_db(ui.ctx(), meters::MASTER_R));
                     if pk > -90.0 {
-                        let r = ui.add(egui::Label::new(RichText::new(format!("{:+.1} dB", pk)).size(11.0).color(if pk >= 0.0 { RED } else { GREY })).sense(Sense::click()));
-                        if r.on_hover_text("Click to reset the peaks").clicked() {
-                            meters::reset_all(ui.ctx());
-                        }
+                        peak_readout(ui, pk);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if toggle(ui, st.tilt, "Tilt", "+4.5 dB/octave: the spectrum looks like what you hear") {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        if chip(ui, "Tilt", st.tilt, "+4.5 dB per octave: the spectrum looks like what you hear") {
                             st.tilt = !st.tilt;
                         }
-                        if toggle(ui, st.peak, "Hold", "Peak hold curve") {
+                        if chip(ui, "Hold", st.peak, "Peak hold curve") {
                             st.peak = !st.peak;
                         }
                     });

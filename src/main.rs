@@ -1,5 +1,6 @@
-//! OpenDembow 0.9 - a modern, elegant DAW.
+//! OpenDembow - a modern, elegant DAW.
 
+mod analyzer;
 mod arrangement;
 mod audio_io;
 mod automation;
@@ -18,6 +19,7 @@ mod keyboard;
 mod latin;
 mod loops;
 mod mcp;
+mod meters;
 mod metronome;
 mod midi_in;
 mod pianoroll;
@@ -26,10 +28,9 @@ mod project_io;
 mod record;
 mod theme;
 mod velocity;
-mod analyzer;
-mod meters;
+mod view;
 
-use eframe::egui::{self, Color32, Key, Rect};
+use eframe::egui::{self, pos2, Color32, Key, Rect};
 use engine::Engine;
 use instruments::Instrument;
 use project::*;
@@ -122,6 +123,13 @@ struct App {
     midi: midi_in::MidiIn,
     /// Favourite instruments (by name).
     favs: HashSet<String>,
+    // 0.9: layout (see view.rs)
+    /// Instrument browser (left).
+    show_browser: bool,
+    /// Piano roll & Mixer panel (bottom).
+    show_detail: bool,
+    /// On-screen piano keyboard (bottom).
+    show_keys: bool,
 }
 
 fn piano_key(k: Key) -> Option<u8> {
@@ -200,6 +208,9 @@ impl App {
             count_in: true,
             midi: midi_in::MidiIn::start(cc.egui_ctx.clone()),
             favs: favorites::load(),
+            show_browser: true,
+            show_detail: true,
+            show_keys: true,
         };
         app.select_clip(0, 0);
         app
@@ -486,6 +497,11 @@ impl App {
                     self.pen = false;
                     self.cancel_count_in();
                 }
+                // layout (view.rs)
+                Key::B if modifiers.command => self.show_browser = !self.show_browser,
+                Key::J if modifiers.command => self.show_detail = !self.show_detail,
+                Key::K if modifiers.command && modifiers.shift => self.show_keys = !self.show_keys,
+                Key::F if modifiers.command && modifiers.shift => self.toggle_focus(),
                 Key::B if !modifiers.command => self.split_at_playhead(),
                 Key::OpenBracket => self.trim_start_to_playhead(),
                 Key::CloseBracket => self.trim_end_to_playhead(),
@@ -547,6 +563,7 @@ impl eframe::App for App {
         self.handle_input(ctx);
 
         let bar = |y: f32| egui::Frame::none().fill(Color32::WHITE).inner_margin(egui::Margin::symmetric(18.0, y));
+        let strip = || egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 3.0));
         egui::TopBottomPanel::top("menu").frame(bar(2.0)).show(ctx, |ui| self.ui_menu(ui));
         egui::TopBottomPanel::top("top").frame(bar(10.0)).show(ctx, |ui| self.ui_top(ui));
         egui::TopBottomPanel::bottom("status")
@@ -555,19 +572,66 @@ impl eframe::App for App {
             .show(ctx, |ui| {
                 ui.label(egui::RichText::new(&self.status).color(GREY).size(12.0));
             });
-        egui::TopBottomPanel::bottom("keyboard")
-            .exact_height(150.0)
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 14.0, right: 14.0, top: 6.0, bottom: 8.0 }))
-            .show(ctx, |ui| self.ui_keyboard(ui));
-        egui::SidePanel::left("browser")
-            .exact_width(300.0)
-            .resizable(false)
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 14.0)))
-            .show(ctx, |ui| self.ui_browser(ui));
-        egui::TopBottomPanel::bottom("detail")
-            .exact_height(285.0)
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 0.0, bottom: 10.0 }))
-            .show(ctx, |ui| self.ui_detail(ui));
+
+        // ---- on-screen keyboard (or its collapsed strip) ----
+        if self.show_keys {
+            let r = egui::TopBottomPanel::bottom("keyboard")
+                .exact_height(150.0)
+                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 14.0, right: 14.0, top: 6.0, bottom: 8.0 }))
+                .show(ctx, |ui| self.ui_keyboard(ui));
+            let rc = r.response.rect;
+            if view::float_toggle(ctx, "eye_keys", pos2(rc.right() - 56.0, rc.top() - 14.0), view::Side::Bottom, true, "Hide keyboard (Ctrl+Shift+K)", true) {
+                self.show_keys = false;
+            }
+        } else {
+            egui::TopBottomPanel::bottom("keyboard_collapsed").exact_height(30.0).frame(strip()).show(ctx, |ui| {
+                if view::collapsed_strip(ui, view::Side::Bottom, "Keyboard", "Show keyboard (Ctrl+Shift+K)") {
+                    self.show_keys = true;
+                }
+            });
+        }
+
+        // ---- instrument browser (or its collapsed rail) ----
+        if self.show_browser {
+            let r = egui::SidePanel::left("browser")
+                .exact_width(300.0)
+                .resizable(false)
+                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 14.0)))
+                .show(ctx, |ui| self.ui_browser(ui));
+            let rc = r.response.rect;
+            if view::float_toggle(ctx, "eye_browser", pos2(rc.right() - 56.0, rc.top() + 27.0), view::Side::Left, true, "Hide instruments (Ctrl+B)", false) {
+                self.show_browser = false;
+            }
+        } else {
+            egui::SidePanel::left("browser_collapsed")
+                .exact_width(48.0)
+                .resizable(false)
+                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(9.0, 16.0)))
+                .show(ctx, |ui| {
+                    if view::panel_button(ui, view::Side::Left, false, "Show instruments (Ctrl+B)") {
+                        self.show_browser = true;
+                    }
+                });
+        }
+
+        // ---- piano roll & mixer (or its collapsed strip) ----
+        if self.show_detail {
+            let r = egui::TopBottomPanel::bottom("detail")
+                .exact_height(285.0)
+                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 0.0, bottom: 10.0 }))
+                .show(ctx, |ui| self.ui_detail(ui));
+            let rc = r.response.rect;
+            if view::float_toggle(ctx, "eye_detail", pos2(rc.right() - 56.0, rc.top() - 14.0), view::Side::Bottom, true, "Hide piano roll & mixer (Ctrl+J)", true) {
+                self.show_detail = false;
+            }
+        } else {
+            egui::TopBottomPanel::bottom("detail_collapsed").exact_height(30.0).frame(strip()).show(ctx, |ui| {
+                if view::collapsed_strip(ui, view::Side::Bottom, "Piano roll & Mixer", "Show piano roll & mixer (Ctrl+J)") {
+                    self.show_detail = true;
+                }
+            });
+        }
+
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 14.0, bottom: 10.0 }))
             .show(ctx, |ui| self.ui_arrangement(ui));

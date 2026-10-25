@@ -68,16 +68,6 @@ pub fn peak_db(ctx: &egui::Context, slot: usize) -> f32 {
     ctx.data(|d| d.get_temp::<Bank>(bank_id())).and_then(|b| b.0.get(&slot).map(|h| h.db)).unwrap_or(-120.0)
 }
 
-/// Peak read-out such as "-6.3" or "-∞".
-pub fn peak_text(ctx: &egui::Context, slot: usize) -> String {
-    let d = peak_db(ctx, slot);
-    if d < -90.0 {
-        "-∞".into()
-    } else {
-        format!("{:+.1}", d)
-    }
-}
-
 /// Clears every peak hold and clip LED.
 pub fn reset_all(ctx: &egui::Context) {
     ctx.data_mut(|d| d.get_temp_mut_or_default::<Bank>(bank_id()).0.clear());
