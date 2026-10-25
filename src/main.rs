@@ -2,6 +2,7 @@
 
 mod arrangement;
 mod audio_io;
+mod automation;
 mod chrome;
 mod drum_names;
 mod drums;
@@ -15,6 +16,7 @@ mod files;
 mod instruments;
 mod keyboard;
 mod latin;
+mod loops;
 mod mcp;
 mod metronome;
 mod midi_in;
@@ -509,6 +511,8 @@ impl App {
                 Key::Z => self.octave = (self.octave - 1).max(0),
                 Key::X => self.octave = (self.octave + 1).min(6),
                 Key::D if modifiers.command => self.duplicate_clip(),
+                Key::L if modifiers.command && modifiers.shift => self.loop_to_selection(ctx),
+                Key::L if modifiers.command => self.toggle_loop(ctx),
                 Key::I if modifiers.command => self.import_dialog(),
                 Key::E if modifiers.command => self.export_mixdown(),
                 Key::S if modifiers.command => self.save_project(modifiers.shift),
@@ -524,6 +528,7 @@ impl eframe::App for App {
         let (pos, playing, meters, _master) = self.engine.status();
         self.playing = playing;
         self.pos_beats = pos as f64 / self.project.sr as f64 * self.project.bpm / 60.0;
+        self.loop_tick(ctx);
         self.metronome.update(playing, self.pos_beats, self.project.bpm);
         let active = playing || meters.iter().any(|m| *m > 0.002);
         self.meters = meters;

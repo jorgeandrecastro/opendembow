@@ -382,6 +382,9 @@ impl App {
             ui.add_space(6.0);
             self.metronome.ui_button(ui, self.pos_beats, self.playing);
             ui.add_space(6.0);
+            // loop on / off (la zone de loop se règle dans la barre au-dessus de la timeline)
+            self.loop_button(ui);
+            ui.add_space(6.0);
             let b = self.pos_beats.max(0.0);
             let txt = format!("{}.{}.{}", (b / 4.0) as u32 + 1, (b % 4.0) as u32 + 1, ((b % 1.0) * 4.0) as u32 + 1);
             ui.label(RichText::new(txt).monospace().size(16.0));
@@ -640,6 +643,7 @@ impl App {
                 ui.label("8. Drums: pick Drum Kit, 808, Trap, Reggaeton Kit or Latin Percussion. The piano roll shows the name of every pad (C2 = kick, D2 = snare...).");
                 ui.label("9. Record: select an instrument track and press R (or the red button). After a 4-beat count-in, what you play becomes a new clip.");
                 ui.label("10. Piano roll: drag a rectangle to select several notes, then move, resize, transpose, copy or delete them together. Hold Alt to turn snapping off.");
+                ui.label("11. Loop: drag in the thin bar above the timeline to choose the part that repeats, then press Ctrl+L (or the Loop button).");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
 
@@ -648,6 +652,9 @@ impl App {
                     ("R", "Record: count-in, then play; R or Space to stop"),
                     ("Home", "Rewind to start"),
                     ("M", "Metronome on / off (right-click it for options)"),
+                    ("Ctrl+L", "Loop on / off"),
+                    ("Ctrl+Shift+L", "Loop the selected clip"),
+                    ("Drag in the loop bar", "Draw / move / resize the loop (right-click for more)"),
                     ("A W S E D F T G Y H U J K O L", "Play notes (piano layout)"),
                     ("Z / X", "Keyboard octave down / up"),
                     ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"),
@@ -666,14 +673,14 @@ impl App {
                     ("↑ ↓  /  Shift+↑ ↓", "Transpose selected notes by a semitone / an octave"),
                     ("← →  /  Shift+← →", "Nudge by one grid step / change note length"),
                     ("Ctrl+U (roll)", "Quantize selected notes to the grid"),
-                    ("Velocity lane", "Drag a bar to set velocity (applies to the selection)"),
+                    ("V badge on a note", "Hover a note, click V to set its velocity (applies to the selection)"),
                     ("Pen + click / drag", "Draw a note (drag sets its length)"),
                     ("Double-click (arrow)", "Add a note"),
                     ("Pen + drag on a lane", "Draw a clip of any length"),
                     ("Ctrl+click clip / note", "Cut it at the click (B cuts at the playhead)"),
                     ("Right-click note", "Delete note (or the whole selection)"),
                     ("Right-click track", "Change instrument / delete track"),
-                    ("Click (Track automation lane)", "Add volume automation point"),
+                    ("Click / drag (automation lane)", "Add / move a volume automation point (right-click a point to delete it)"),
                     ("Ctrl+S / Ctrl+O", "Save / open project"),
                     ("Ctrl+I / Ctrl+E", "Import audio / export mixdown"),
                     ("Pinch or Ctrl+wheel", "Zoom the timeline or piano roll"),
