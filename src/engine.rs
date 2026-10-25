@@ -1,5 +1,6 @@
 //! Real-time mixer, audio output and offline bounce.
 
+use crate::analyzer::Tap;
 use crate::effects::FxProcessor;
 use crate::instruments::{Instrument, Voice};
 use crate::project::*;
@@ -162,10 +163,10 @@ impl Mixer {
 
             let mut pk = 0.0f32;
             for i in 0..n {
-                // Position en battements (beats) pour cet échantillon précis
+                // Position in beats for this exact sample
                 let current_beat = (pos + i) as f64 / spb;
 
-                // Lecture dynamique des valeurs automatisées (ou valeurs par défaut des sliders)
+                // Automated values (or the slider values when there is no automation)
                 let vol = t.get_automation_value("volume", current_beat, t.volume);
                 let pan = t.get_automation_value("pan", current_beat, t.pan);
 
@@ -221,6 +222,8 @@ pub struct Shared {
 pub struct Engine {
     shared: Arc<Mutex<Shared>>,
     pub error: Option<String>,
+    /// Lock-free tap of the master output (spectrum + peaks), read by the UI.
+    pub tap: Arc<Tap>,
     _stream: Option<cpal::Stream>,
 }
 
@@ -240,13 +243,14 @@ impl Engine {
             playing: false,
             mixer: Mixer::new(),
         }));
-        match Self::open(shared.clone()) {
-            Ok(s) => Engine { shared, error: None, _stream: Some(s) },
-            Err(e) => Engine { shared, error: Some(e), _stream: None },
+        let tap = Tap::new();
+        match Self::open(shared.clone(), tap.clone()) {
+            Ok(s) => Engine { shared, error: None, tap, _stream: Some(s) },
+            Err(e) => Engine { shared, error: Some(e), tap, _stream: None },
         }
     }
 
-    fn open(shared: Arc<Mutex<Shared>>) -> Result<cpal::Stream, String> {
+    fn open(shared: Arc<Mutex<Shared>>, tap: Arc<Tap>) -> Result<cpal::Stream, String> {
         let dev = cpal::default_host()
             .default_output_device()
             .ok_or_else(|| "No audio output device found".to_string())?;
@@ -254,6 +258,7 @@ impl Engine {
         if cfg.sample_format() != cpal::SampleFormat::F32 {
             return Err("Unsupported audio format (f32 required)".into());
         }
+        tap.set_sr(cfg.sample_rate().0 as f32);
         let channels = cfg.channels() as usize;
         let stream = dev
             .build_output_stream(
@@ -267,8 +272,15 @@ impl Engine {
                     if s.playing {
                         s.pos += n;
                     }
+                    let mut w = tap.begin();
+                    let (mut pl, mut pr) = (0.0f32, 0.0f32);
                     for (i, frame) in data.chunks_mut(channels).enumerate() {
-                        let (l, r) = (soft(s.mixer.l[i]), soft(s.mixer.r[i]));
+                        let (xl, xr) = (s.mixer.l[i], s.mixer.r[i]);
+                        // peaks BEFORE the soft limiter, so an over (> 0 dBFS) is visible
+                        pl = pl.max(xl.abs());
+                        pr = pr.max(xr.abs());
+                        let (l, r) = (soft(xl), soft(xr));
+                        tap.put(&mut w, (l + r) * 0.5);
                         if channels == 1 {
                             frame[0] = (l + r) * 0.5;
                         } else {
@@ -279,6 +291,7 @@ impl Engine {
                             }
                         }
                     }
+                    tap.end(w, pl, pr);
                 },
                 |e| eprintln!("audio error: {e}"),
                 None,

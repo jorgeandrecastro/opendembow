@@ -1,4 +1,4 @@
-//! OpenDembow 0.8 - a modern, elegant DAW.
+//! OpenDembow 0.9 - a modern, elegant DAW.
 
 mod arrangement;
 mod audio_io;
@@ -26,6 +26,8 @@ mod project_io;
 mod record;
 mod theme;
 mod velocity;
+mod analyzer;
+mod meters;
 
 use eframe::egui::{self, Color32, Key, Rect};
 use engine::Engine;

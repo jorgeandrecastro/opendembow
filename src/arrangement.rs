@@ -537,7 +537,7 @@ impl App {
             if xresp.clicked() {
                 acts.push(Act::Delete(i));
             }
-            let level = self.meters.get(i).copied().unwrap_or(0.0).min(1.0);
+            let level = crate::meters::norm(self.meters.get(i).copied().unwrap_or(0.0));
             hp.rect_filled(Rect::from_min_size(pos2(hr.left() + 20.0, hr.bottom() - 33.0), vec2(96.0 * level, 3.0)), 1.5, Color32::from_rgb(52, 199, 89));
             let vr = Rect::from_min_size(pos2(hr.left() + 20.0, hr.bottom() - 27.0), vec2(96.0, 18.0));
             if let Some(v) = fader(ui, ui.id().with(("v", i)), vr, t.volume, 0.0, 1.25, col, "Volume", None) {

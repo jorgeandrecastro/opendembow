@@ -1,7 +1,8 @@
-//! Effects: per-track EQ, compressor, reverb and delay, plus the "Mixer & Effects" panel.
+//! Effects: per-track EQ, compressor, reverb and delay, plus the "Mixer & Effects" panel
+//! (track strips, Master spectrum + dBFS meters, effect cards).
 //!
-//! The DSP (`FxProcessor`) does not depend on the UI. To hear the effects, the engine must
-//! own one `FxProcessor` per track and call, on the track's stereo buffers, BEFORE volume/pan:
+//! The DSP (`FxProcessor`) does not depend on the UI. The engine owns one `FxProcessor` per track
+//! and calls, on the track's stereo buffers, BEFORE volume/pan:
 //!
 //! ```ignore
 //! fx_proc[t].process_block(&project.tracks[t].fx, &mut left, &mut right);
@@ -508,7 +509,7 @@ fn fx_card(ui: &mut egui::Ui, title: &str, on: &mut bool, col: Color32, body: im
 }
 
 impl App {
-    /// "Mixer & Effects" tab: one strip per track + effect cards of the selected track.
+    /// "Mixer & Effects" tab: track strips | Master (spectrum + meters) | effects of the selected track.
     pub fn ui_fx(&mut self, ui: &mut egui::Ui) {
         let n = self.project.tracks.len();
         if n == 0 {
@@ -517,9 +518,10 @@ impl App {
             return;
         }
         let (w, h) = (ui.available_width(), ui.available_height());
+        let tap = self.engine.tap.clone();
         ui.horizontal_top(|ui| {
             ui.add_space(14.0);
-            let mw = (n as f32 * 70.0 + 8.0).min(w * 0.34);
+            let mw = (n as f32 * 70.0 + 8.0).min(w * 0.30);
             ui.allocate_ui_with_layout(vec2(mw, h), egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.push_id("mixer_scroll", |ui| {
                     egui::ScrollArea::horizontal().auto_shrink([false, false]).show(ui, |ui| {
@@ -531,6 +533,8 @@ impl App {
                     });
                 });
             });
+            ui.add_space(8.0);
+            crate::analyzer::master_panel(ui, &tap, 340.0f32.min(w * 0.34), h);
             ui.add_space(8.0);
             let ew = ui.available_width();
             ui.allocate_ui_with_layout(vec2(ew, h), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -545,7 +549,8 @@ impl App {
         let color = PALETTE[tr.color % 8];
         let (mut vol, mut pan, mut mute, mut solo) = (tr.volume, tr.pan, tr.mute, tr.solo);
         let selected = self.sel_track == i;
-        let level = self.meters.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0);
+        // not clamped: an over (> 0 dBFS) lights the clip LED
+        let level = self.meters.get(i).copied().unwrap_or(0.0);
         let (mut changed, mut select) = (false, false);
         let soft = Color32::from_rgb(240, 240, 245);
 
@@ -566,10 +571,8 @@ impl App {
                         ui.spacing_mut().slider_width = 100.0;
                         let r = ui.add(egui::Slider::new(&mut vol, 0.0..=1.0).vertical().show_value(false));
                         changed |= r.changed();
-                        let (mr, _) = ui.allocate_exact_size(vec2(6.0, 100.0), Sense::hover());
-                        ui.painter().rect_filled(mr, 3.0, tint(INK, 14));
-                        let fill = Rect_from_bottom(mr, level);
-                        ui.painter().rect_filled(fill, 3.0, color);
+                        // dBFS meter: hover for the held peak, click to reset
+                        crate::meters::meter(ui, vec2(8.0, 106.0), i, level, false);
                     });
                     ui.spacing_mut().slider_width = 42.0;
                     let r = ui.add(egui::Slider::new(&mut pan, -1.0..=1.0).show_value(false));
@@ -678,11 +681,4 @@ impl App {
             self.push();
         }
     }
-}
-
-/// Rect filling the bottom `frac` of `r`.
-#[allow(non_snake_case)]
-fn Rect_from_bottom(r: egui::Rect, frac: f32) -> egui::Rect {
-    let hh = r.height() * frac.clamp(0.0, 1.0);
-    egui::Rect::from_min_max(pos2(r.left(), r.bottom() - hh), r.right_bottom())
 }
