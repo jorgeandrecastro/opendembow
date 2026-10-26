@@ -1,4 +1,4 @@
-//! Loops façon Ableton : une barre en haut de la timeline (la « brace ») où l'on choisit
+//! Loops  : une barre en haut de la timeline (la « brace ») où l'on choisit
 //! la partie qui se répète.
 //!
 //! - glisser dans la barre : dessine une nouvelle zone de loop
@@ -7,8 +7,8 @@
 //! - clic droit sur la barre : menu (on/off, clip sélectionné, 1 / 2 / 4 / 8 mesures depuis le playhead)
 //!
 //! L'état est gardé dans la mémoire temporaire d'egui (rien à changer dans `App`).
-//! Le bouclage se fait dans `loop_tick`, une fois par image : quand le playhead franchit la fin
-//! de la zone, on le replace au début en reportant le petit dépassement (pas de dérive).
+//! Le bouclage lui-même est fait dans le callback audio (`engine.rs`), à l'échantillon près :
+//! `loop_tick` se contente de lui transmettre la zone une fois par image.
 
 use crate::theme::*;
 use crate::App;
@@ -45,14 +45,12 @@ struct LoopState {
     on: bool,
     start: f64,
     end: f64,
-    /// position du playhead à l'image précédente
-    last: f64,
     drag: Option<DragInfo>,
 }
 
 impl Default for LoopState {
     fn default() -> Self {
-        Self { on: false, start: 0.0, end: 8.0, last: 0.0, drag: None }
+        Self { on: false, start: 0.0, end: 8.0, drag: None }
     }
 }
 
@@ -108,20 +106,12 @@ impl App {
         }
     }
 
-    /// À appeler une fois par image (dans `update`, après le calcul de `pos_beats`).
+    /// À appeler une fois par image (dans `update`). Transmet la zone au moteur audio,
+    /// qui fait le bouclage à l'échantillon près ; ne déplace plus le playhead lui-même.
     pub(crate) fn loop_tick(&mut self, ctx: &egui::Context) {
-        let mut st = get(ctx);
-        let pos = self.pos_beats;
-        if st.on && self.playing && st.end > st.start && st.last < st.end && pos >= st.end && pos - st.last < 2.0 {
-            // le playhead vient de franchir la fin : retour au début, en gardant le dépassement
-            let target = (st.start + (pos - st.end)).min(st.end - 0.001);
-            self.engine.set_pos(target, self.project.bpm, self.project.sr);
-            self.pos_beats = target;
-            st.last = target;
-        } else {
-            st.last = pos;
-        }
-        put(ctx, st);
+        let st = get(ctx);
+        let range = (st.on && st.end > st.start).then_some((st.start, st.end));
+        self.engine.set_loop(range, self.project.bpm, self.project.sr);
     }
 
     /// Bouton « Loop » de la barre de transport.

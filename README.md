@@ -1,11 +1,11 @@
-# OpenDembow 0.9
+# OpenDembow 0.10
 
 ![OpenDembow Interface](images/image1.png)
 ![OpenDembow Interface](images/image2.png)
 ![OpenDembow Interface](images/image3.png)
 
 A modern, elegant digital audio workstation written in Rust. Clean light interface, one accent colour,
-rounded everything - and now a calmer layout: hide what you do not use, see what you hear.
+rounded everything - a calmer layout where you can hide what you do not use, see what you hear, and loops that never slip.
 
 ## Run
 ``` bash
@@ -14,7 +14,7 @@ cargo run --release
 
 Requires stable Rust (https://rustup.rs). On Linux: `sudo apt install libasound2-dev pkg-config` (used for both audio output and MIDI input).
 
-Dependencies in `Cargo.toml` (0.9 adds none: the FFT and the lock-free audio tap are written in the project):
+Dependencies in `Cargo.toml` (0.10 adds none: the FFT and the lock-free audio tap are written in the project):
 
 ```toml
 eframe = "0.29"
@@ -24,6 +24,18 @@ rfd = "0.15"
 serde_json = "1"   # MCP server
 midir = "0.11"     # MIDI input
 ```
+
+Set `version = "0.10.0"` in `Cargo.toml`: the version number shown in the transport bar follows it.
+
+## What's new in 0.10
+**Rock-solid loops: the loop now runs inside the audio engine**
+- **Fixed: the playhead could escape the loop** after a few repetitions. The old loop was checked once per interface frame, so a late frame (spectrum drawing, a slow window) could miss the moment the playhead crossed the loop end, and the playhead then carried on past it
+- The loop is now handled **in the audio callback, sample by sample**: when the playhead reaches the loop end inside an audio buffer, the engine renders up to that exact sample, jumps back to the loop start and keeps rendering. It cannot miss a pass, and there is **no drift and no accumulated error**, whatever the frame rate of the interface
+- As long as the loop is on, the playhead never leaves it. Turn the loop off and playback simply continues
+- Notes still ringing when the loop wraps are released, so tails do not pile up from one pass to the next
+- A playhead placed after the loop end plays on normally
+- A tempo change is taken into account immediately (the interface sends the loop range to the engine every frame)
+- The loop interface itself is unchanged: same loop bar, same shortcuts
 
 ## What's new in 0.9
 **See your sound: Master spectrum and dBFS meters**
@@ -57,7 +69,7 @@ midir = "0.11"     # MIDI input
 - The brace is amber when the loop is on and grey when it is off; the looped region is tinted on the timeline
 - Click the brace, press `Ctrl+L` or use the **Loop** button in the transport bar to switch it on or off; `Ctrl+Shift+L` loops the selected clip
 - Right-click the bar for more: loop the selected clip, or loop 1 / 2 / 4 / 8 bars from the playhead
-- The playhead jumps back at the end of the loop, carrying the tiny overshoot so the beat grid never drifts
+- The playhead jumps back at the end of the loop (sample-accurate since 0.10)
 
 **Volume automation, redesigned**
 - Each track has a pink automation lane under its clips, separate from the clips
@@ -73,6 +85,7 @@ midir = "0.11"     # MIDI input
 
 ## Features
 - **33 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, Drums & Percussion
+- **Sample-accurate loops** (0.10): the loop runs inside the audio engine, so the playhead never leaves it while the loop is on (see above)
 - **Master spectrum analyzer and dBFS meters** (0.9): see the whole mix in real time (see above)
 - **Hideable panels and Focus mode** (0.9): instruments, piano roll & mixer and keyboard can be hidden; View menu, panel icons and shortcuts
 - **Recording with count-in** (0.7): press `R` or the red button, hear a 4-beat count-in, then play - the notes you play become a new MIDI clip (undo with Ctrl+Z)
@@ -151,7 +164,7 @@ Select a MIDI clip (or double-click an empty lane to create one) to edit its not
 3. Click the brace, press `Ctrl+L` or press the **Loop** button to turn the loop on or off. `Ctrl+Shift+L` loops the selected clip.
 4. Right-click the bar to loop the selected clip or to loop 1 / 2 / 4 / 8 bars from the playhead.
 
-Notes: playback loops when the playhead crosses the end of the loop (checked once per frame, so the jump can be a few milliseconds late; the overshoot is carried over so the grid does not drift). Starting the playhead after the loop end plays on normally. The loop range is not saved in the project yet.
+Notes: the loop is handled inside the audio engine, so the jump back to the start is sample-accurate and the beat grid never drifts, whatever the frame rate of the interface. While the loop is on, the playhead never leaves it. Starting the playhead after the loop end plays on normally. Notes still ringing when the loop wraps are released. The loop does not apply to the exported mixdown. The loop range is not saved in the project yet.
 
 ## Automation
 Each track has a volume automation lane under its clips, with 0 / 50 / 100 % guides.
@@ -262,13 +275,13 @@ Favourite instruments are not part of a project: they are stored per user in `~/
 The piano roll's note selection and scale choice, the loop range, the analyzer options (Hold / Tilt) and the panel layout are not saved either.
 
 ## Layout of the source
-- `engine.rs` real-time mixer (one effect chain per track), cpal output, master tap for the analyzer, offline bounce
+- `engine.rs` real-time mixer (one effect chain per track), cpal output, sample-accurate loop wrapping in the audio callback, master tap for the analyzer, offline bounce
 - `analyzer.rs` lock-free master tap, FFT spectrum and the Master card - `meters.rs` dBFS meters, peak hold, clip LED
 - `view.rs` show / hide panels, panel icons, collapsed strips, View menu
 - `instruments.rs` synth voices and instrument categories - `project.rs` data model - `project_io.rs` save/load + MIDI export
 - `drums.rs` Drum Kit and 808 Kit - `drums_urban.rs` Trap Kit and Reggaeton Kit - `latin.rs` Latin Percussion - `extra_voices.rs` 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - `drum_names.rs` pad names shown in the piano roll (one map per kit family)
-- `arrangement.rs` timeline: track headers, ruler, clips, playhead - `loops.rs` loop bar, loop region and looping playback - `automation.rs` volume automation lanes
+- `arrangement.rs` timeline: track headers, ruler, clips, playhead - `loops.rs` loop bar and loop region (sends the range to the engine, which does the wrapping) - `automation.rs` volume automation lanes
 - `pianoroll.rs` note editing, multi-selection, scales - `velocity.rs` the V badge and its velocity slider
 - `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites, help), `theme.rs` interface
 - `effects.rs` effect settings, DSP (`FxProcessor`) and the Mixer & Effects panel
@@ -285,12 +298,12 @@ The piano roll's note selection and scale choice, the loop range, the analyzer o
 3. Write its sound in `Voice::next` (or in `extra_voices.rs` / `drums.rs` to keep files short).
 
 ## Roadmap
-Next (0.9.x / 0.10): visual equalizer (drag points on the response curve, spectrum behind it), compressor transfer curve with gain-reduction meter,
+Next (0.10.x / 0.11): visual equalizer (drag points on the response curve, spectrum behind it), compressor transfer curve with gain-reduction meter,
 automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout and the loop range in the project,
 LUFS and stereo correlation meters, waveforms with a dB scale.
 
 Later: step sequencer, audio recording, quantization while recording, fold-to-scale in the piano roll, dark theme, a "Designer" synth with filter / envelopes / LFO,
-sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects, sample-accurate looping inside the audio engine.
+sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects.
 
 ## License
 

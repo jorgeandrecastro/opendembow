@@ -217,6 +217,12 @@ pub struct Shared {
     pub pos: usize,
     pub playing: bool,
     pub mixer: Mixer,
+    /// Loop region in samples (start, end). `None` = no loop. Wrapping is done
+    /// inside the audio callback, so it is sample-accurate and never misses a pass.
+    pub loop_range: Option<(usize, usize)>,
+    /// Output accumulation buffers of the callback (L / R), reused between calls.
+    ol: Vec<f32>,
+    orr: Vec<f32>,
 }
 
 pub struct Engine {
@@ -242,6 +248,9 @@ impl Engine {
             pos: 0,
             playing: false,
             mixer: Mixer::new(),
+            loop_range: None,
+            ol: Vec::new(),
+            orr: Vec::new(),
         }));
         let tap = Tap::new();
         match Self::open(shared.clone(), tap.clone()) {
@@ -268,14 +277,46 @@ impl Engine {
                     let s = &mut *g;
                     let n = data.len() / channels;
                     let proj = s.project.clone();
-                    s.mixer.render(&proj, s.pos, s.playing, n);
-                    if s.playing {
-                        s.pos += n;
+
+                    // Render in chunks: when the playhead reaches the loop end inside this
+                    // buffer, render up to the end, jump to the loop start, and keep going.
+                    s.ol.clear();
+                    s.ol.resize(n, 0.0);
+                    s.orr.clear();
+                    s.orr.resize(n, 0.0);
+                    let mut done = 0;
+                    while done < n {
+                        let mut chunk = n - done;
+                        let mut wrap_to = None;
+                        if s.playing {
+                            if let Some((a, b)) = s.loop_range {
+                                // A playhead already past the end just plays on normally.
+                                if b > a && s.pos < b && s.pos + chunk >= b {
+                                    chunk = b - s.pos;
+                                    wrap_to = Some(a);
+                                }
+                            }
+                        }
+                        s.mixer.render(&proj, s.pos, s.playing, chunk);
+                        s.ol[done..done + chunk].copy_from_slice(&s.mixer.l[..chunk]);
+                        s.orr[done..done + chunk].copy_from_slice(&s.mixer.r[..chunk]);
+                        if s.playing {
+                            s.pos += chunk;
+                        }
+                        done += chunk;
+                        if let Some(a) = wrap_to {
+                            s.pos = a;
+                            // cut the tails of the notes still ringing from the last pass
+                            for v in s.mixer.voices.iter_mut().filter(|v| !v.live) {
+                                v.release();
+                            }
+                        }
                     }
+
                     let mut w = tap.begin();
                     let (mut pl, mut pr) = (0.0f32, 0.0f32);
                     for (i, frame) in data.chunks_mut(channels).enumerate() {
-                        let (xl, xr) = (s.mixer.l[i], s.mixer.r[i]);
+                        let (xl, xr) = (s.ol[i], s.orr[i]);
                         // peaks BEFORE the soft limiter, so an over (> 0 dBFS) is visible
                         pl = pl.max(xl.abs());
                         pr = pr.max(xr.abs());
@@ -303,6 +344,13 @@ impl Engine {
 
     pub fn set_project(&self, p: &Project) {
         self.shared.lock().unwrap().project = Arc::new(p.clone());
+    }
+
+    /// Sets (or clears) the loop region, given in beats. Called every frame by the UI.
+    pub fn set_loop(&self, r: Option<(f64, f64)>, bpm: f64, sr: f32) {
+        let k = 60.0 / bpm * sr as f64;
+        self.shared.lock().unwrap().loop_range =
+            r.map(|(a, b)| ((a.max(0.0) * k) as usize, (b.max(0.0) * k) as usize));
     }
 
     pub fn toggle_play(&self) {
