@@ -1,10 +1,13 @@
 //! File commands: new / open / save project, export mixdown, stems and MIDI.
 use crate::{audio_io, engine, project_io, App};
+use eframe::egui;
 
 impl App {
-    pub fn new_project(&mut self) {
+    pub fn new_project(&mut self, ctx: &egui::Context) {
         self.checkpoint();
         self.project.tracks.clear();
+        self.project.loop_region = None;
+        self.set_loop_region(ctx, None);
         self.sel_track = 0;
         self.sel_clip = None;
         self.sel_note = None;
@@ -24,7 +27,7 @@ impl App {
         }
     }
 
-    pub fn save_project(&mut self, save_as: bool) {
+    pub fn save_project(&mut self, ctx: &egui::Context, save_as: bool) {
         let path = match (&self.project_path, save_as) {
             (Some(p), false) => Some(p.clone()),
             _ => rfd::FileDialog::new()
@@ -34,6 +37,8 @@ impl App {
                 .map(|p| p.with_extension("dembow")),
         };
         if let Some(p) = path {
+            // la loop vit dans la mémoire d'egui : on la recopie dans le projet avant d'écrire
+            self.project.loop_region = self.loop_region(ctx);
             match project_io::save_project(&self.project, &p) {
                 Ok(()) => {
                     self.status = format!("Saved {}", p.display());
@@ -44,11 +49,12 @@ impl App {
         }
     }
 
-    pub fn open_project_dialog(&mut self) {
+    pub fn open_project_dialog(&mut self, ctx: &egui::Context) {
         let Some(p) = rfd::FileDialog::new().add_filter("OpenDembow project", &["dembow"]).pick_file() else { return };
         match project_io::load_project(&p, self.project.sr) {
             Ok(proj) => {
                 self.project = proj;
+                self.set_loop_region(ctx, self.project.loop_region);
                 self.undo.clear();
                 self.redo.clear();
                 self.sel_track = 0;

@@ -37,6 +37,12 @@ Set `version = "0.10.0"` in `Cargo.toml`: the version number shown in the transp
 - A tempo change is taken into account immediately (the interface sends the loop range to the engine every frame)
 - The loop interface itself is unchanged: same loop bar, same shortcuts
 
+**Saved with the project**
+- The **loop range** (start, end, on / off) is now saved in the `.dembow` file and restored when you open it
+- **Volume automation is saved too**: before this fix the automation points were lost every time a project was saved
+- Older projects still open (they simply have no loop and no automation)
+- The version number in the transport bar now really follows `Cargo.toml` (it used to show a fixed number)
+
 ## What's new in 0.9
 **See your sound: Master spectrum and dBFS meters**
 - A **Master** card in the Mixer & Effects tab shows a real-time **spectrum analyzer**: 4096-point FFT (Hann window), logarithmic frequency axis from 20 Hz to 20 kHz, level in dB, smooth gradient curve
@@ -105,7 +111,7 @@ Set `version = "0.10.0"` in `Cargo.toml`: the version number shown in the transp
 - **MCP server**: let an AI assistant build and mix your song (it knows the drum map too)
 - Audio tracks: import WAV (drag & drop or menu)
 - Menu bar (File / Edit / Track / View / Help) and a "?" help button (F1)
-- Save / open projects (`.dembow`), undo / redo (Edit menu, Ctrl+Z)
+- Save / open projects (`.dembow`: tracks, clips, effects, volume automation and loop range), undo / redo (Edit menu, Ctrl+Z)
 - Export: mixdown WAV, stems (one WAV per track), MIDI file
 - **Volume Automation** (0.7, redesigned in 0.8): click directly in the dedicated bottom lane of any track to add automation points and draw smooth volume curves
 - **Loops** (0.8): Ableton-style loop bar above the timeline
@@ -164,7 +170,7 @@ Select a MIDI clip (or double-click an empty lane to create one) to edit its not
 3. Click the brace, press `Ctrl+L` or press the **Loop** button to turn the loop on or off. `Ctrl+Shift+L` loops the selected clip.
 4. Right-click the bar to loop the selected clip or to loop 1 / 2 / 4 / 8 bars from the playhead.
 
-Notes: the loop is handled inside the audio engine, so the jump back to the start is sample-accurate and the beat grid never drifts, whatever the frame rate of the interface. While the loop is on, the playhead never leaves it. Starting the playhead after the loop end plays on normally. Notes still ringing when the loop wraps are released. The loop does not apply to the exported mixdown. The loop range is not saved in the project yet.
+Notes: the loop is handled inside the audio engine, so the jump back to the start is sample-accurate and the beat grid never drifts, whatever the frame rate of the interface. While the loop is on, the playhead never leaves it. Starting the playhead after the loop end plays on normally. Notes still ringing when the loop wraps are released. The loop does not apply to the exported mixdown. The loop range is saved with the project and restored when you open it (a project where you never touched the loop saves none).
 
 ## Automation
 Each track has a volume automation lane under its clips, with 0 / 50 / 100 % guides.
@@ -172,6 +178,7 @@ Each track has a volume automation lane under its clips, with 0 / 50 / 100 % gui
 - **Drag** a point to move it; it stays between its neighbours and snaps to the grid and to 0 / 50 / 100 % (`Alt` = free)
 - **Right-click** a point to delete it
 - Before the first point and after the last one, the value stays flat
+- The points are saved in the project file
 
 ## Drums
 Add a drum kit track (**Drum Kit**, **808 Kit**, **Trap Kit** or **Reggaeton Kit**) and play it with the on-screen keyboard, your computer keys or the piano roll.
@@ -267,21 +274,22 @@ Tools: `get_project`, `list_instruments`, `get_notes`, `set_tempo`, `add_track`,
 Every change goes through the normal undo history and appears live in the window.
 
 ## Project files
-A `.dembow` project is plain text (tab separated). Each track line is followed by its effect settings
-(`fx<TAB>reverb.mix<TAB>0.3` ...) when they differ from the defaults; older projects without effects still open.
+A `.dembow` project is plain text (tab separated). The `bpm` line may be followed by a `loop<TAB>start<TAB>end<TAB>on` line (in beats).
+Each track line is followed by its effect settings (`fx<TAB>reverb.mix<TAB>0.3` ...) when they differ from the defaults,
+then by its automation points (`auto<TAB>volume<TAB>beat<TAB>value`, one per point); older projects without these lines still open.
 Audio clips are stored next to the project as `<name>.audioN.wav`.
 
 Favourite instruments are not part of a project: they are stored per user in `~/.opendembow_favorites` (one instrument name per line).
-The piano roll's note selection and scale choice, the loop range, the analyzer options (Hold / Tilt) and the panel layout are not saved either.
+The piano roll's note selection and scale choice, the analyzer options (Hold / Tilt) and the panel layout are not saved.
 
 ## Layout of the source
 - `engine.rs` real-time mixer (one effect chain per track), cpal output, sample-accurate loop wrapping in the audio callback, master tap for the analyzer, offline bounce
 - `analyzer.rs` lock-free master tap, FFT spectrum and the Master card - `meters.rs` dBFS meters, peak hold, clip LED
 - `view.rs` show / hide panels, panel icons, collapsed strips, View menu
-- `instruments.rs` synth voices and instrument categories - `project.rs` data model - `project_io.rs` save/load + MIDI export
+- `instruments.rs` synth voices and instrument categories - `project.rs` data model - `project_io.rs` save/load (loop range, effects, automation) + MIDI export
 - `drums.rs` Drum Kit and 808 Kit - `drums_urban.rs` Trap Kit and Reggaeton Kit - `latin.rs` Latin Percussion - `extra_voices.rs` 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck
 - `drum_names.rs` pad names shown in the piano roll (one map per kit family)
-- `arrangement.rs` timeline: track headers, ruler, clips, playhead - `loops.rs` loop bar and loop region (sends the range to the engine, which does the wrapping) - `automation.rs` volume automation lanes
+- `arrangement.rs` timeline: track headers, ruler, clips, playhead - `loops.rs` loop bar and loop region (sends the range to the engine, which does the wrapping; hands the range to / takes it from the project on save / open) - `automation.rs` volume automation lanes
 - `pianoroll.rs` note editing, multi-selection, scales - `velocity.rs` the V badge and its velocity slider
 - `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites, help), `theme.rs` interface
 - `effects.rs` effect settings, DSP (`FxProcessor`) and the Mixer & Effects panel
@@ -290,7 +298,7 @@ The piano roll's note selection and scale choice, the loop range, the analyzer o
 - `favorites.rs` favourite instruments (saved in the home folder)
 - `mcp.rs` MCP server
 - `metronome.rs` metronome click (own audio stream) and its transport button
-- `files.rs` file commands - `audio_io.rs` WAV I/O
+- `files.rs` file commands (new / open / save, exports) - `audio_io.rs` WAV I/O
 
 ## Adding an instrument
 1. Add a variant to `Instrument` in `instruments.rs` and to `Instrument::ALL` (append at the end to keep old projects compatible).
@@ -299,7 +307,7 @@ The piano roll's note selection and scale choice, the loop range, the analyzer o
 
 ## Roadmap
 Next (0.10.x / 0.11): visual equalizer (drag points on the response curve, spectrum behind it), compressor transfer curve with gain-reduction meter,
-automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout and the loop range in the project,
+automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout,
 LUFS and stereo correlation meters, waveforms with a dB scale.
 
 Later: step sequencer, audio recording, quantization while recording, fold-to-scale in the piano roll, dark theme, a "Designer" synth with filter / envelopes / LFO,

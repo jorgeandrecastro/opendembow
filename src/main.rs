@@ -533,8 +533,8 @@ impl App {
                 Key::L if modifiers.command => self.toggle_loop(ctx),
                 Key::I if modifiers.command => self.import_dialog(),
                 Key::E if modifiers.command => self.export_mixdown(),
-                Key::S if modifiers.command => self.save_project(modifiers.shift),
-                Key::O if modifiers.command => self.open_project_dialog(),
+                Key::S if modifiers.command => self.save_project(ctx, modifiers.shift),
+                Key::O if modifiers.command => self.open_project_dialog(ctx),
                 _ => {}
             }
         }

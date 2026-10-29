@@ -192,19 +192,19 @@ impl App {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("New Project").clicked() {
-                    self.new_project();
+                    self.new_project(ui.ctx());
                     ui.close_menu();
                 }
                 if ui.add(egui::Button::new("Open Project…").shortcut_text("Ctrl+O")).clicked() {
-                    self.open_project_dialog();
+                    self.open_project_dialog(ui.ctx());
                     ui.close_menu();
                 }
                 if ui.add(egui::Button::new("Save Project").shortcut_text("Ctrl+S")).clicked() {
-                    self.save_project(false);
+                    self.save_project(ui.ctx(), false);
                     ui.close_menu();
                 }
                 if ui.button("Save Project As…").clicked() {
-                    self.save_project(true);
+                    self.save_project(ui.ctx(), true);
                     ui.close_menu();
                 }
                 ui.separator();
@@ -349,7 +349,8 @@ impl App {
     pub fn ui_top(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("OpenDembow").size(18.0).strong());
-            ui.label(RichText::new("0.8").color(GREY));
+            // le numéro de version suit `version` dans Cargo.toml
+            ui.label(RichText::new(env!("CARGO_PKG_VERSION")).color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
@@ -409,7 +410,7 @@ impl App {
                     }
                 });
                 if ui.button("Save").clicked() {
-                    self.save_project(false);
+                    self.save_project(ui.ctx(), false);
                 }
                 // Undo / redo live in the Edit menu and on Ctrl+Z / Ctrl+Shift+Z.
             });
@@ -652,7 +653,7 @@ impl App {
                 ui.label("8. Drums: pick Drum Kit, 808, Trap, Reggaeton Kit or Latin Percussion. The piano roll shows the name of every pad (C2 = kick, D2 = snare...).");
                 ui.label("9. Record: select an instrument track and press R (or the red button). After a 4-beat count-in, what you play becomes a new clip.");
                 ui.label("10. Piano roll: drag a rectangle to select several notes, then move, resize, transpose, copy or delete them together. Hold Alt to turn snapping off.");
-                ui.label("11. Loop: drag in the thin bar above the timeline to choose the part that repeats, then press Ctrl+L (or the Loop button).");
+                ui.label("11. Loop: drag in the thin bar above the timeline to choose the part that repeats, then press Ctrl+L (or the Loop button). The loop range is saved with the project.");
                 ui.add_space(10.0);
                 ui.label(RichText::new("Shortcuts").size(15.0).strong());
 

@@ -47,6 +47,16 @@ pub struct AutomationLane {
     pub points: Vec<AutomationPoint>,
 }
 
+/// Plage de boucle, en beats, telle qu'elle est enregistrée dans le projet.
+/// L'état « vivant » de la boucle reste dans `loops.rs` ; cette copie sert à la
+/// sauvegarde / au chargement (voir `App::loop_region` et `App::set_loop_region`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct LoopRegion {
+    pub start: f64,
+    pub end: f64,
+    pub on: bool,
+}
+
 impl Clip {
     pub fn len_beats(&self, bpm: f64, sr: f32) -> f64 {
         match &self.kind {
@@ -74,7 +84,7 @@ pub struct Track {
     pub clips: Vec<Clip>,
     /// EQ, compressor, reverb, delay.
     pub fx: FxSettings,
-    /// Lignes d'automatisation de la piste 
+    /// Lignes d'automatisation de la piste
     pub automations: Vec<AutomationLane>,
 }
 
@@ -128,6 +138,8 @@ pub struct Project {
     pub sr: f32,
     pub bpm: f64,
     pub tracks: Vec<Track>,
+    /// Plage de boucle sauvegardée avec le projet (`None` : aucune loop définie).
+    pub loop_region: Option<LoopRegion>,
 }
 
 impl Project {
@@ -173,6 +185,6 @@ impl Project {
         let mut drums = Track::new("Reggaeton Kit", TrackKind::Instrument(Instrument::ReggaetonKit), 2);
         drums.clips.push(Clip { name: "Dembow".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(beat) });
 
-        Project { sr, bpm: 100.0, tracks: vec![piano, b, drums] }
+        Project { sr, bpm: 100.0, tracks: vec![piano, b, drums], loop_region: None }
     }
 }

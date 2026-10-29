@@ -9,7 +9,11 @@
 //! L'état est gardé dans la mémoire temporaire d'egui (rien à changer dans `App`).
 //! Le bouclage lui-même est fait dans le callback audio (`engine.rs`), à l'échantillon près :
 //! `loop_tick` se contente de lui transmettre la zone une fois par image.
+//!
+//! Sauvegarde : la plage est recopiée dans `Project::loop_region` au moment d'enregistrer
+//! (`loop_region`) et relue à l'ouverture d'un projet (`set_loop_region`).
 
+use crate::project::LoopRegion;
 use crate::theme::*;
 use crate::App;
 use eframe::egui::{self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Rounding, Sense};
@@ -20,6 +24,8 @@ pub(crate) const LOOP_H: f32 = 16.0;
 const AMBER: Color32 = Color32::from_rgb(255, 159, 10);
 /// Longueur minimale d'une loop, en temps.
 const MIN_LEN: f64 = 1.0;
+/// Plage par défaut (loop éteinte, 2 mesures) : tant qu'on n'y touche pas, rien n'est sauvegardé.
+const DEFAULT_END: f64 = 8.0;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
@@ -50,7 +56,7 @@ struct LoopState {
 
 impl Default for LoopState {
     fn default() -> Self {
-        Self { on: false, start: 0.0, end: 8.0, drag: None }
+        Self { on: false, start: 0.0, end: DEFAULT_END, drag: None }
     }
 }
 
@@ -82,6 +88,27 @@ impl App {
         let (t, c) = self.sel_clip?;
         let clip = self.project.tracks.get(t)?.clips.get(c)?;
         Some((clip.start, clip.start + clip.len_beats(self.project.bpm, self.project.sr)))
+    }
+
+    /// Plage de loop à enregistrer dans le projet ; `None` tant que la loop n'a jamais été touchée.
+    /// À appeler juste avant `save_project` : `self.project.loop_region = self.loop_region(ctx);`
+    pub(crate) fn loop_region(&self, ctx: &egui::Context) -> Option<LoopRegion> {
+        let st = get(ctx);
+        if !st.on && st.start == 0.0 && st.end == DEFAULT_END {
+            return None;
+        }
+        Some(LoopRegion { start: st.start, end: st.end, on: st.on })
+    }
+
+    /// Applique la plage lue dans un projet (ou la remet à zéro avec `None`).
+    /// À appeler après `load_project`, et pour un nouveau projet. `loop_tick` la transmet
+    /// ensuite au moteur à l'image suivante.
+    pub(crate) fn set_loop_region(&self, ctx: &egui::Context, region: Option<LoopRegion>) {
+        let st = match region {
+            Some(l) => LoopState { on: l.on, start: l.start, end: l.end, drag: None },
+            None => LoopState::default(),
+        };
+        put(ctx, st);
     }
 
     pub(crate) fn toggle_loop(&mut self, ctx: &egui::Context) {

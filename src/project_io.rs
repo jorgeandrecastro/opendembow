@@ -24,6 +24,12 @@ fn write_wav_f32(path: &Path, data: &[f32], sr: u32) -> Result<(), String> {
 ///
 /// Effects are stored as `fx<TAB>effect.param<TAB>value` lines right after their `track` line
 /// (only when the track's effects differ from the defaults).
+///
+/// The loop range, when there is one, is stored as `loop<TAB>start<TAB>end<TAB>on` (in beats,
+/// `on` is 0 or 1) right after the `bpm` line. Older projects have no such line.
+///
+/// Automation points are stored as `auto<TAB>parameter<TAB>beat<TAB>value` lines, one per point,
+/// after the `fx` lines of their track.
 pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
     let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "project".into());
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
@@ -31,6 +37,9 @@ pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
     let mut n_audio = 0;
     let _ = writeln!(out, "OPENDEMBOW\t1");
     let _ = writeln!(out, "bpm\t{}", p.bpm);
+    if let Some(l) = &p.loop_region {
+        let _ = writeln!(out, "loop\t{}\t{}\t{}", l.start, l.end, l.on as u8);
+    }
     for t in &p.tracks {
         let kind = match t.kind {
             TrackKind::Instrument(i) => i.name().to_string(),
@@ -40,6 +49,11 @@ pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
         if t.fx != FxSettings::default() {
             for (key, v) in t.fx.params() {
                 let _ = writeln!(out, "fx\t{}\t{}", key, v as f32);
+            }
+        }
+        for lane in &t.automations {
+            for pt in &lane.points {
+                let _ = writeln!(out, "auto\t{}\t{}\t{}", clean(&lane.parameter_id), pt.beat, pt.value);
             }
         }
         for c in &t.clips {
@@ -69,11 +83,19 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
     if !lines.next().unwrap_or("").starts_with("OPENDEMBOW") {
         return Err("Not an OpenDembow project".into());
     }
-    let mut p = Project { sr, bpm: 100.0, tracks: Vec::new() };
+    let mut p = Project { sr, bpm: 100.0, tracks: Vec::new(), loop_region: None };
     for line in lines {
         let f: Vec<&str> = line.split('\t').collect();
         match f.first().copied() {
             Some("bpm") => p.bpm = f.get(1).and_then(|s| s.parse().ok()).unwrap_or(100.0),
+            // Loop range. Old projects have no such line (no loop); an invalid range is ignored.
+            Some("loop") if f.len() >= 4 => {
+                if let (Ok(s), Ok(e)) = (f[1].parse::<f64>(), f[2].parse::<f64>()) {
+                    if s.is_finite() && e.is_finite() && s >= 0.0 && e > s {
+                        p.loop_region = Some(LoopRegion { start: s, end: e, on: f[3] == "1" });
+                    }
+                }
+            }
             Some("track") if f.len() >= 8 => {
                 let kind = if f[1] == "audio" {
                     TrackKind::Audio
@@ -93,6 +115,22 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
                 if let (Some(t), Ok(v)) = (p.tracks.last_mut(), f[2].parse::<f64>()) {
                     if v.is_finite() {
                         t.fx.set_param(f[1], v);
+                    }
+                }
+            }
+            // Automation point of the last track: `auto<TAB>parameter<TAB>beat<TAB>value`.
+            // Old projects have no such lines. Points are sorted once the whole file is read.
+            Some("auto") if f.len() >= 4 => {
+                if let (Some(t), Ok(beat), Ok(value)) = (p.tracks.last_mut(), f[2].parse::<f64>(), f[3].parse::<f32>()) {
+                    if beat.is_finite() && value.is_finite() && beat >= 0.0 {
+                        let i = match t.automations.iter().position(|l| l.parameter_id == f[1]) {
+                            Some(i) => i,
+                            None => {
+                                t.automations.push(AutomationLane { parameter_id: f[1].to_string(), points: Vec::new() });
+                                t.automations.len() - 1
+                            }
+                        };
+                        t.automations[i].points.push(AutomationPoint { beat, value });
                     }
                 }
             }
@@ -118,6 +156,11 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
                 }
             }
             _ => {}
+        }
+    }
+    for t in &mut p.tracks {
+        for lane in &mut t.automations {
+            lane.points.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
         }
     }
     Ok(p)
