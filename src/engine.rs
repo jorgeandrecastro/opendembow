@@ -48,7 +48,18 @@ impl Mixer {
 
     /// Renders `n` frames starting at sample `pos` into the internal L/R buffers.
     pub fn render(&mut self, p: &Project, pos: usize, playing: bool, n: usize) {
-        let Mixer { voices, meters, master, l, r, peaks, tl, tr, fx, fx_sr } = self;
+        let Mixer {
+            voices,
+            meters,
+            master,
+            l,
+            r,
+            peaks,
+            tl,
+            tr,
+            fx,
+            fx_sr,
+        } = self;
         l.clear();
         l.resize(n, 0.0);
         r.clear();
@@ -100,7 +111,14 @@ impl Mixer {
                                     let s = ((c.start + nn.start) * spb) as usize;
                                     if s >= pos && s < pos + n {
                                         let hold = ((nn.len * spb) as usize).max(1);
-                                        voices.push(Voice::new(ti, inst, nn.key, nn.vel, s - pos, hold));
+                                        voices.push(Voice::new(
+                                            ti,
+                                            inst,
+                                            nn.key,
+                                            nn.vel,
+                                            s - pos,
+                                            hold,
+                                        ));
                                     }
                                 }
                             }
@@ -155,6 +173,8 @@ impl Mixer {
         for ti in 0..count {
             let t = &p.tracks[ti];
             fx[ti].process_block(&t.fx, &mut tl[ti], &mut tr[ti]);
+            // 0.11: exact gain reduction for the compressor meter (atomic store, no lock)
+            crate::curves::publish_gr(ti, fx[ti].gain_reduction_db());
 
             if t.mute || (any_solo && !t.solo) {
                 peaks[ti] = 0.0;
@@ -254,8 +274,18 @@ impl Engine {
         }));
         let tap = Tap::new();
         match Self::open(shared.clone(), tap.clone()) {
-            Ok(s) => Engine { shared, error: None, tap, _stream: Some(s) },
-            Err(e) => Engine { shared, error: Some(e), tap, _stream: None },
+            Ok(s) => Engine {
+                shared,
+                error: None,
+                tap,
+                _stream: Some(s),
+            },
+            Err(e) => Engine {
+                shared,
+                error: Some(e),
+                tap,
+                _stream: None,
+            },
         }
     }
 
@@ -372,7 +402,12 @@ impl Engine {
     }
 
     pub fn note_on(&self, track: usize, inst: Instrument, key: u8) {
-        self.shared.lock().unwrap().mixer.voices.push(Voice::live(track, inst, key, 0.85));
+        self.shared
+            .lock()
+            .unwrap()
+            .mixer
+            .voices
+            .push(Voice::live(track, inst, key, 0.85));
     }
 
     pub fn note_off(&self, key: u8) {
@@ -386,7 +421,12 @@ impl Engine {
     /// Short preview of a note (used when editing in the piano roll).
     pub fn audition(&self, track: usize, inst: Instrument, key: u8, sr: f32) {
         let hold = (0.25 * sr) as usize;
-        self.shared.lock().unwrap().mixer.voices.push(Voice::new(track, inst, key, 0.8, 0, hold));
+        self.shared
+            .lock()
+            .unwrap()
+            .mixer
+            .voices
+            .push(Voice::new(track, inst, key, 0.8, 0, hold));
     }
 
     /// (position in samples, playing, per-track meters, master meter)

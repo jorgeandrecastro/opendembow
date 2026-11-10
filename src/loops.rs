@@ -13,10 +13,12 @@
 //! Sauvegarde : la plage est recopiée dans `Project::loop_region` au moment d'enregistrer
 //! (`loop_region`) et relue à l'ouverture d'un projet (`set_loop_region`).
 
+use crate::App;
 use crate::project::LoopRegion;
 use crate::theme::*;
-use crate::App;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Rounding, Sense};
+use eframe::egui::{
+    self, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Rounding, Sense, pos2, vec2,
+};
 
 /// Hauteur de la barre de loop (au-dessus de la règle des mesures).
 pub(crate) const LOOP_H: f32 = 16.0;
@@ -56,7 +58,12 @@ struct LoopState {
 
 impl Default for LoopState {
     fn default() -> Self {
-        Self { on: false, start: 0.0, end: DEFAULT_END, drag: None }
+        Self {
+            on: false,
+            start: 0.0,
+            end: DEFAULT_END,
+            drag: None,
+        }
     }
 }
 
@@ -71,7 +78,8 @@ fn sid() -> egui::Id {
 }
 
 fn get(ctx: &egui::Context) -> LoopState {
-    ctx.data_mut(|d| d.get_temp::<LoopState>(sid())).unwrap_or_default()
+    ctx.data_mut(|d| d.get_temp::<LoopState>(sid()))
+        .unwrap_or_default()
 }
 
 fn put(ctx: &egui::Context, st: LoopState) {
@@ -79,7 +87,11 @@ fn put(ctx: &egui::Context, st: LoopState) {
 }
 
 fn bars(st: &LoopState) -> String {
-    format!("bars {}-{}", (st.start / 4.0).floor() as i64 + 1, ((st.end / 4.0).ceil() as i64).max(1))
+    format!(
+        "bars {}-{}",
+        (st.start / 4.0).floor() as i64 + 1,
+        ((st.end / 4.0).ceil() as i64).max(1)
+    )
 }
 
 impl App {
@@ -87,7 +99,10 @@ impl App {
     fn sel_clip_span(&self) -> Option<(f64, f64)> {
         let (t, c) = self.sel_clip?;
         let clip = self.project.tracks.get(t)?.clips.get(c)?;
-        Some((clip.start, clip.start + clip.len_beats(self.project.bpm, self.project.sr)))
+        Some((
+            clip.start,
+            clip.start + clip.len_beats(self.project.bpm, self.project.sr),
+        ))
     }
 
     /// Plage de loop à enregistrer dans le projet ; `None` tant que la loop n'a jamais été touchée.
@@ -97,7 +112,11 @@ impl App {
         if !st.on && st.start == 0.0 && st.end == DEFAULT_END {
             return None;
         }
-        Some(LoopRegion { start: st.start, end: st.end, on: st.on })
+        Some(LoopRegion {
+            start: st.start,
+            end: st.end,
+            on: st.on,
+        })
     }
 
     /// Applique la plage lue dans un projet (ou la remet à zéro avec `None`).
@@ -105,7 +124,12 @@ impl App {
     /// ensuite au moteur à l'image suivante.
     pub(crate) fn set_loop_region(&self, ctx: &egui::Context, region: Option<LoopRegion>) {
         let st = match region {
-            Some(l) => LoopState { on: l.on, start: l.start, end: l.end, drag: None },
+            Some(l) => LoopState {
+                on: l.on,
+                start: l.start,
+                end: l.end,
+                drag: None,
+            },
             None => LoopState::default(),
         };
         put(ctx, st);
@@ -114,7 +138,11 @@ impl App {
     pub(crate) fn toggle_loop(&mut self, ctx: &egui::Context) {
         let mut st = get(ctx);
         st.on = !st.on;
-        self.status = if st.on { format!("Loop on ({}).", bars(&st)) } else { "Loop off.".into() };
+        self.status = if st.on {
+            format!("Loop on ({}).", bars(&st))
+        } else {
+            "Loop off.".into()
+        };
         put(ctx, st);
     }
 
@@ -138,37 +166,63 @@ impl App {
     pub(crate) fn loop_tick(&mut self, ctx: &egui::Context) {
         let st = get(ctx);
         let range = (st.on && st.end > st.start).then_some((st.start, st.end));
-        self.engine.set_loop(range, self.project.bpm, self.project.sr);
+        self.engine
+            .set_loop(range, self.project.bpm, self.project.sr);
     }
 
     /// Bouton « Loop » de la barre de transport.
     pub(crate) fn loop_button(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let on = get(&ctx).on;
-        let b = egui::Button::new(RichText::new("Loop").size(12.5).color(if on { Color32::WHITE } else { INK }))
-            .fill(if on { AMBER } else { Color32::from_rgb(243, 243, 247) })
-            .rounding(Rounding::same(14.0))
-            .min_size(vec2(52.0, 28.0));
-        if ui.add(b).on_hover_text("Loop on / off (Ctrl+L). Set the range in the bar above the timeline.").clicked() {
+        let b = egui::Button::new(RichText::new("Loop").size(12.5).color(if on {
+            Color32::WHITE
+        } else {
+            INK
+        }))
+        .fill(if on {
+            AMBER
+        } else {
+            Color32::from_rgb(243, 243, 247)
+        })
+        .rounding(Rounding::same(14.0))
+        .min_size(vec2(52.0, 28.0));
+        if ui
+            .add(b)
+            .on_hover_text("Loop on / off (Ctrl+L). Set the range in the bar above the timeline.")
+            .clicked()
+        {
             self.toggle_loop(&ctx);
         }
     }
 
     /// Voile ambre sur la région bouclée (à dessiner avant les clips).
-    pub(crate) fn draw_loop_overlay(&self, ui: &egui::Ui, lp: &egui::Painter, lanes: Rect, sx: f64, ppb: f32) {
+    pub(crate) fn draw_loop_overlay(
+        &self,
+        ui: &egui::Ui,
+        lp: &egui::Painter,
+        lanes: Rect,
+        sx: f64,
+        ppb: f32,
+    ) {
         let st = get(ui.ctx());
         if !st.on {
             return;
         }
         let bx = |b: f64| lanes.left() + ((b - sx) as f32) * ppb;
         let (x0, x1) = (bx(st.start), bx(st.end));
-        let r = Rect::from_min_max(pos2(x0.max(lanes.left()), lanes.top()), pos2(x1.min(lanes.right()), lanes.bottom()));
+        let r = Rect::from_min_max(
+            pos2(x0.max(lanes.left()), lanes.top()),
+            pos2(x1.min(lanes.right()), lanes.bottom()),
+        );
         if r.width() > 0.0 {
             lp.rect_filled(r, 0.0, tint(AMBER, 16));
         }
         for x in [x0, x1] {
             if x >= lanes.left() && x <= lanes.right() {
-                lp.line_segment([pos2(x, lanes.top()), pos2(x, lanes.bottom())], stroke(1.5, tint(AMBER, 170)));
+                lp.line_segment(
+                    [pos2(x, lanes.top()), pos2(x, lanes.bottom())],
+                    stroke(1.5, tint(AMBER, 170)),
+                );
             }
         }
     }
@@ -180,8 +234,20 @@ impl App {
         let bx = |b: f64| zone.left() + ((b - sx) as f32) * ppb;
         let beat_at = |x: f32| ((x - zone.left()) / ppb) as f64 + sx;
         // magnétisme : au temps (ou à la mesure quand on est très dézoomé), Alt = libre
-        let step = if ui.input(|i| i.modifiers.alt) { 0.0 } else if ppb >= 14.0 { 1.0 } else { 4.0 };
-        let snap = |b: f64| if step > 0.0 { (b / step).round() * step } else { b };
+        let step = if ui.input(|i| i.modifiers.alt) {
+            0.0
+        } else if ppb >= 14.0 {
+            1.0
+        } else {
+            4.0
+        };
+        let snap = |b: f64| {
+            if step > 0.0 {
+                (b / step).round() * step
+            } else {
+                b
+            }
+        };
 
         let resp = ui.interact(zone, ui.id().with("loop_zone"), Sense::click_and_drag());
         let (x0, x1) = (bx(st.start), bx(st.end));
@@ -199,20 +265,36 @@ impl App {
         };
 
         // curseur
-        let mode_now = st.drag.map(|d| d.mode).or_else(|| resp.hover_pos().map(|p| hit(p)));
+        let mode_now = st
+            .drag
+            .map(|d| d.mode)
+            .or_else(|| resp.hover_pos().map(|p| hit(p)));
         match mode_now {
-            Some(Mode::Left) | Some(Mode::Right) => ctx.set_cursor_icon(CursorIcon::ResizeHorizontal),
-            Some(Mode::Body) => ctx.set_cursor_icon(if st.drag.is_some() { CursorIcon::Grabbing } else { CursorIcon::Grab }),
+            Some(Mode::Left) | Some(Mode::Right) => {
+                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal)
+            }
+            Some(Mode::Body) => ctx.set_cursor_icon(if st.drag.is_some() {
+                CursorIcon::Grabbing
+            } else {
+                CursorIcon::Grab
+            }),
             Some(Mode::New) => ctx.set_cursor_icon(CursorIcon::Crosshair),
             None => {}
         }
 
         // glisser : nouvelle zone / déplacer / redimensionner
         if resp.drag_started() {
-            let origin = ui.input(|i| i.pointer.press_origin()).or_else(|| resp.interact_pointer_pos());
+            let origin = ui
+                .input(|i| i.pointer.press_origin())
+                .or_else(|| resp.interact_pointer_pos());
             if let Some(p) = origin {
                 let b = beat_at(p.x);
-                st.drag = Some(DragInfo { mode: hit(p), grab: b - st.start, anchor: snap(b).max(0.0), len: st.end - st.start });
+                st.drag = Some(DragInfo {
+                    mode: hit(p),
+                    grab: b - st.start,
+                    anchor: snap(b).max(0.0),
+                    len: st.end - st.start,
+                });
                 st.on = true;
             }
         }
@@ -244,7 +326,11 @@ impl App {
             if let Some(p) = resp.interact_pointer_pos() {
                 if hit(p) == Mode::Body {
                     st.on = !st.on;
-                    self.status = if st.on { format!("Loop on ({}).", bars(&st)) } else { "Loop off.".into() };
+                    self.status = if st.on {
+                        format!("Loop on ({}).", bars(&st))
+                    } else {
+                        "Loop off.".into()
+                    };
                 }
             }
         }
@@ -255,17 +341,33 @@ impl App {
         let on_now = st.on;
         let mut act: Option<MenuAct> = None;
         resp.context_menu(|ui| {
-            if ui.add(egui::Button::new(if on_now { "Loop off" } else { "Loop on" }).shortcut_text("Ctrl+L")).clicked() {
+            if ui
+                .add(
+                    egui::Button::new(if on_now { "Loop off" } else { "Loop on" })
+                        .shortcut_text("Ctrl+L"),
+                )
+                .clicked()
+            {
                 act = Some(MenuAct::Toggle);
                 ui.close_menu();
             }
-            if ui.add_enabled(sel_span.is_some(), egui::Button::new("Loop selected clip").shortcut_text("Ctrl+Shift+L")).clicked() {
+            if ui
+                .add_enabled(
+                    sel_span.is_some(),
+                    egui::Button::new("Loop selected clip").shortcut_text("Ctrl+Shift+L"),
+                )
+                .clicked()
+            {
                 act = Some(MenuAct::Clip);
                 ui.close_menu();
             }
             ui.separator();
             for n in [1u32, 2, 4, 8] {
-                let label = if n == 1 { "Loop 1 bar from here".to_string() } else { format!("Loop {n} bars from here") };
+                let label = if n == 1 {
+                    "Loop 1 bar from here".to_string()
+                } else {
+                    format!("Loop {n} bars from here")
+                };
                 if ui.button(label).clicked() {
                     act = Some(MenuAct::Bars(n));
                     ui.close_menu();
@@ -292,11 +394,27 @@ impl App {
         // ---- dessin ----
         let (x0, x1) = (bx(st.start), bx(st.end));
         let p = ui.painter_at(zone);
-        p.rect_filled(zone, Rounding { nw: 0.0, ne: 14.0, sw: 0.0, se: 0.0 }, Color32::from_rgb(248, 248, 251));
+        p.rect_filled(
+            zone,
+            Rounding {
+                nw: 0.0,
+                ne: 14.0,
+                sw: 0.0,
+                se: 0.0,
+            },
+            Color32::from_rgb(248, 248, 251),
+        );
         p.line_segment([zone.left_bottom(), zone.right_bottom()], stroke(1.0, HAIR));
         if x1 >= zone.left() && x0 <= zone.right() {
-            let col = if st.on { AMBER } else { Color32::from_rgb(178, 178, 188) };
-            let r = Rect::from_min_max(pos2(x0.max(zone.left()), zone.top() + 3.0), pos2(x1.min(zone.right()), zone.bottom() - 3.0));
+            let col = if st.on {
+                AMBER
+            } else {
+                Color32::from_rgb(178, 178, 188)
+            };
+            let r = Rect::from_min_max(
+                pos2(x0.max(zone.left()), zone.top() + 3.0),
+                pos2(x1.min(zone.right()), zone.bottom() - 3.0),
+            );
             p.rect_filled(r, 4.0, tint(col, if st.on { 90 } else { 60 }));
             p.rect_stroke(r, 4.0, stroke(1.2, col));
             // poignées aux deux bouts
@@ -304,14 +422,30 @@ impl App {
                 p.rect_filled(Rect::from_min_size(r.min, vec2(5.0, r.height())), 3.0, col);
             }
             if x1 <= zone.right() {
-                p.rect_filled(Rect::from_min_max(pos2(r.right() - 5.0, r.top()), r.right_bottom()), 3.0, col);
+                p.rect_filled(
+                    Rect::from_min_max(pos2(r.right() - 5.0, r.top()), r.right_bottom()),
+                    3.0,
+                    col,
+                );
             }
             if r.width() > 90.0 {
-                let txt_col = if st.on { Color32::from_rgb(150, 92, 0) } else { GREY };
-                p.text(pos2(r.left() + 12.0, r.center().y), Align2::LEFT_CENTER, format!("Loop · {}", bars(&st)), FontId::proportional(10.0), txt_col);
+                let txt_col = if st.on {
+                    Color32::from_rgb(150, 92, 0)
+                } else {
+                    GREY
+                };
+                p.text(
+                    pos2(r.left() + 12.0, r.center().y),
+                    Align2::LEFT_CENTER,
+                    format!("Loop · {}", bars(&st)),
+                    FontId::proportional(10.0),
+                    txt_col,
+                );
             }
         }
-        resp.clone().on_hover_text("Drag to set the loop · click the brace to turn it on/off · right-click for more");
+        resp.clone().on_hover_text(
+            "Drag to set the loop · click the brace to turn it on/off · right-click for more",
+        );
 
         put(&ctx, st);
     }

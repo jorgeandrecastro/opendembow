@@ -4,7 +4,7 @@
 //! MASTER_* slots), so no change is needed in `App`.
 
 use crate::theme::*;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, Sense, Vec2};
+use eframe::egui::{self, Align2, Color32, FontId, Rect, Sense, Vec2, pos2, vec2};
 use std::collections::HashMap;
 
 pub const FLOOR_DB: f32 = -60.0;
@@ -52,7 +52,12 @@ struct Hold {
 
 impl Default for Hold {
     fn default() -> Self {
-        Self { lvl: 0.0, db: -120.0, t: 0.0, clip: false }
+        Self {
+            lvl: 0.0,
+            db: -120.0,
+            t: 0.0,
+            clip: false,
+        }
     }
 }
 
@@ -65,7 +70,9 @@ fn bank_id() -> egui::Id {
 
 /// Held peak of a slot, in dBFS (-120 = nothing yet).
 pub fn peak_db(ctx: &egui::Context, slot: usize) -> f32 {
-    ctx.data(|d| d.get_temp::<Bank>(bank_id())).and_then(|b| b.0.get(&slot).map(|h| h.db)).unwrap_or(-120.0)
+    ctx.data(|d| d.get_temp::<Bank>(bank_id()))
+        .and_then(|b| b.0.get(&slot).map(|h| h.db))
+        .unwrap_or(-120.0)
 }
 
 /// Clears every peak hold and clip LED.
@@ -83,8 +90,16 @@ pub fn meter(ui: &mut egui::Ui, size: Vec2, slot: usize, lin: f32, fall: bool) -
     let clicked = resp.clicked();
 
     let h = ctx.data_mut(|d| {
-        let h = d.get_temp_mut_or_default::<Bank>(bank_id()).0.entry(slot).or_default();
-        h.lvl = if fall { lin.max(h.lvl * 10f32.powf(-dt)) } else { lin };
+        let h = d
+            .get_temp_mut_or_default::<Bank>(bank_id())
+            .0
+            .entry(slot)
+            .or_default();
+        h.lvl = if fall {
+            lin.max(h.lvl * 10f32.powf(-dt))
+        } else {
+            lin
+        };
         let db = to_db(h.lvl);
         if db >= h.db {
             h.db = db;
@@ -112,20 +127,35 @@ pub fn meter(ui: &mut egui::Ui, size: Vec2, slot: usize, lin: f32, fall: bool) -
     p.rect_filled(bar, 3.0, tint(INK, 14));
     let y = |db: f32| bar.bottom() - db_norm(db) * bar.height();
     let lvl_db = to_db(h.lvl);
-    for (lo, hi, col) in [(FLOOR_DB, -12.0, GREEN), (-12.0, -3.0, AMBER), (-3.0, 0.0, RED)] {
+    for (lo, hi, col) in [
+        (FLOOR_DB, -12.0, GREEN),
+        (-12.0, -3.0, AMBER),
+        (-3.0, 0.0, RED),
+    ] {
         let top = lvl_db.min(hi);
         if top > lo {
-            p.rect_filled(Rect::from_min_max(pos2(bar.left(), y(top)), pos2(bar.right(), y(lo))), 0.0, col);
+            p.rect_filled(
+                Rect::from_min_max(pos2(bar.left(), y(top)), pos2(bar.right(), y(lo))),
+                0.0,
+                col,
+            );
         }
     }
     if h.db > FLOOR_DB {
         let yy = y(h.db).clamp(bar.top() + 1.0, bar.bottom());
-        p.line_segment([pos2(bar.left(), yy), pos2(bar.right(), yy)], stroke(2.0, if h.db >= 0.0 { RED } else { INK }));
+        p.line_segment(
+            [pos2(bar.left(), yy), pos2(bar.right(), yy)],
+            stroke(2.0, if h.db >= 0.0 { RED } else { INK }),
+        );
     }
     let led = Rect::from_min_size(rect.min, vec2(rect.width(), 4.0));
     p.rect_filled(led, 2.0, if h.clip { RED } else { tint(INK, 14) });
 
-    let tip = if h.db < -90.0 { "Peak: -∞ dBFS".to_string() } else { format!("Peak: {:+.1} dBFS - click to reset", h.db) };
+    let tip = if h.db < -90.0 {
+        "Peak: -∞ dBFS".to_string()
+    } else {
+        format!("Peak: {:+.1} dBFS - click to reset", h.db)
+    };
     resp.on_hover_text(tip)
 }
 
@@ -136,7 +166,17 @@ pub fn scale(ui: &mut egui::Ui, size: Vec2) {
     let (top, bh) = (rect.top() + CLIP_H, rect.height() - CLIP_H);
     for db in [0.0f32, -12.0, -24.0, -48.0] {
         let y = top + (1.0 - db_norm(db)) * bh;
-        let al = if db == 0.0 { Align2::LEFT_TOP } else { Align2::LEFT_CENTER };
-        p.text(pos2(rect.left() + 2.0, y), al, format!("{}", db as i32), FontId::proportional(9.0), GREY);
+        let al = if db == 0.0 {
+            Align2::LEFT_TOP
+        } else {
+            Align2::LEFT_CENTER
+        };
+        p.text(
+            pos2(rect.left() + 2.0, y),
+            al,
+            format!("{}", db as i32),
+            FontId::proportional(9.0),
+            GREY,
+        );
     }
 }

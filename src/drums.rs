@@ -10,7 +10,7 @@ use std::f32::consts::TAU;
 pub(crate) enum Pad {
     Kick,
     Rim,
-    Snare(bool),     // tight
+    Snare(bool), // tight
     Clap,
     Tom(f32),        // base frequency in Hz
     Hat(f32, f32),   // decay rate, duration in s
@@ -76,7 +76,10 @@ pub(crate) fn highpass(st: &mut f32, x: f32, a: f32) -> f32 {
 /// Six detuned square waves: the classic 808 "metallic" cymbal source.
 pub(crate) fn metal(t: f32) -> f32 {
     const F: [f32; 6] = [205.3, 304.4, 369.6, 522.7, 540.0, 800.0];
-    F.iter().map(|f| if (TAU * f * t).sin() > 0.0 { 1.0 } else { -1.0 }).sum::<f32>() / 6.0
+    F.iter()
+        .map(|f| if (TAU * f * t).sin() > 0.0 { 1.0 } else { -1.0 })
+        .sum::<f32>()
+        / 6.0
 }
 
 /// Next sample of a drum hit, or `None` once it is over.
@@ -88,7 +91,11 @@ pub fn hit(e808: bool, key: u8, t: f32, dt: f32, rng: &mut u32, st: &mut [f32; 4
     let n = noise(rng);
     let (s, dur) = match pad(key) {
         Pad::Kick => {
-            let (f0, sweep, rate, dur) = if e { (42.0, 150.0, 28.0, 1.4) } else { (50.0, 110.0, 35.0, 0.45) };
+            let (f0, sweep, rate, dur) = if e {
+                (42.0, 150.0, 28.0, 1.4)
+            } else {
+                (50.0, 110.0, 35.0, 0.45)
+            };
             let f = f0 + sweep * (-t * rate).exp();
             st[0] = (st[0] + TAU * f * dt) % TAU;
             let body = st[0].sin() * (-t * if e { 2.6 } else { 9.0 }).exp();
@@ -102,7 +109,8 @@ pub fn hit(e808: bool, key: u8, t: f32, dt: f32, rng: &mut u32, st: &mut [f32; 4
         }
         Pad::Snare(tight) => {
             let k = if tight { 1.4 } else { 1.0 };
-            let tone = ((TAU * 185.0 * t).sin() + 0.6 * (TAU * 330.0 * t).sin()) * (-t * 24.0 * k).exp();
+            let tone =
+                ((TAU * 185.0 * t).sin() + 0.6 * (TAU * 330.0 * t).sin()) * (-t * 24.0 * k).exp();
             let nz = highpass(&mut st[1], n, 0.25) * (-t * if e { 14.0 } else { 17.0 } * k).exp();
             (0.55 * tone + 0.75 * nz, if tight { 0.22 } else { 0.35 })
         }
@@ -125,7 +133,8 @@ pub fn hit(e808: bool, key: u8, t: f32, dt: f32, rng: &mut u32, st: &mut [f32; 4
             let b = if e { base * 0.8 } else { base };
             let f = b * (1.0 + 0.7 * (-t * 22.0).exp());
             st[0] = (st[0] + TAU * f * dt) % TAU;
-            let s = st[0].sin() * (-t * if e { 4.0 } else { 7.0 }).exp() + n * (-t * 200.0).exp() * 0.2;
+            let s =
+                st[0].sin() * (-t * if e { 4.0 } else { 7.0 }).exp() + n * (-t * 200.0).exp() * 0.2;
             (s, if e { 1.2 } else { 0.7 })
         }
         Pad::Hat(rate, dur) => {
@@ -143,10 +152,19 @@ pub fn hit(e808: bool, key: u8, t: f32, dt: f32, rng: &mut u32, st: &mut [f32; 4
                 s += (TAU * f * r * t).sin() / r;
             }
             let tick = highpass(&mut st[1], n, 0.3) * (-t * 90.0).exp() * 0.5;
-            (s * 0.35 * (-t * if bell { 2.5 } else { 3.5 }).exp() + tick, 1.6)
+            (
+                s * 0.35 * (-t * if bell { 2.5 } else { 3.5 }).exp() + tick,
+                1.6,
+            )
         }
         Pad::Cowbell => {
-            let q = |f: f32| if (TAU * f * t).sin() > 0.0 { 1.0f32 } else { -1.0 };
+            let q = |f: f32| {
+                if (TAU * f * t).sin() > 0.0 {
+                    1.0f32
+                } else {
+                    -1.0
+                }
+            };
             st[1] += 0.3 * (q(540.0) + q(800.0) - st[1]);
             (st[1] * 0.5 * (-t * if e { 9.0 } else { 12.0 }).exp(), 0.5)
         }

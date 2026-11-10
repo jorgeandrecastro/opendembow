@@ -1,10 +1,10 @@
 //! Clip editing: split, trim, cut / copy / paste, audio tools, and the tab bar of the bottom panel.
 
+use crate::pianoroll::{SIZES, size_label};
 use crate::project::*;
 use crate::theme::*;
-use crate::pianoroll::{size_label, SIZES};
 use crate::{App, DetailTab};
-use eframe::egui::{self, vec2, Color32, RichText, Rounding};
+use eframe::egui::{self, Color32, RichText, Rounding, vec2};
 use std::sync::Arc;
 
 /// What Copy / Cut put in the clipboard.
@@ -48,8 +48,18 @@ pub fn split_data(clip: &Clip, cut: f64, bpm: f64, sr: f32) -> Option<(Clip, Cli
                     r.push(b);
                 }
             }
-            let left = Clip { name: clip.name.clone(), start: clip.start, len: cut, kind: ClipKind::Midi(l) };
-            let right = Clip { name: clip.name.clone(), start: clip.start + cut, len: clip.len - cut, kind: ClipKind::Midi(r) };
+            let left = Clip {
+                name: clip.name.clone(),
+                start: clip.start,
+                len: cut,
+                kind: ClipKind::Midi(l),
+            };
+            let right = Clip {
+                name: clip.name.clone(),
+                start: clip.start + cut,
+                len: clip.len - cut,
+                kind: ClipKind::Midi(r),
+            };
             Some((left, right))
         }
         ClipKind::Audio(d) => {
@@ -57,8 +67,18 @@ pub fn split_data(clip: &Clip, cut: f64, bpm: f64, sr: f32) -> Option<(Clip, Cli
             if i == 0 || i >= d.len() {
                 return None;
             }
-            let left = Clip { name: clip.name.clone(), start: clip.start, len: 0.0, kind: ClipKind::Audio(Arc::new(d[..i].to_vec())) };
-            let right = Clip { name: clip.name.clone(), start: clip.start + cut, len: 0.0, kind: ClipKind::Audio(Arc::new(d[i..].to_vec())) };
+            let left = Clip {
+                name: clip.name.clone(),
+                start: clip.start,
+                len: 0.0,
+                kind: ClipKind::Audio(Arc::new(d[..i].to_vec())),
+            };
+            let right = Clip {
+                name: clip.name.clone(),
+                start: clip.start + cut,
+                len: 0.0,
+                kind: ClipKind::Audio(Arc::new(d[i..].to_vec())),
+            };
             Some((left, right))
         }
     }
@@ -89,7 +109,12 @@ pub fn resize_clip(orig: &Clip, left: bool, beat: f64, bpm: f64, sr: f32) -> Opt
                             n
                         })
                         .collect();
-                    Some(Clip { name: orig.name.clone(), start: b, len: total + shift, kind: ClipKind::Midi(moved) })
+                    Some(Clip {
+                        name: orig.name.clone(),
+                        start: b,
+                        len: total + shift,
+                        kind: ClipKind::Midi(moved),
+                    })
                 }
                 ClipKind::Audio(_) => Some(orig.clone()),
             }
@@ -145,10 +170,20 @@ impl App {
 
     /// Split clip (t, c) at an absolute timeline position. Returns the index of the new right-hand clip.
     pub fn split_clip_at(&mut self, t: usize, c: usize, beat: f64) -> Result<usize, String> {
-        let clip = self.project.tracks.get(t).and_then(|tr| tr.clips.get(c)).ok_or("no such clip")?.clone();
-        let beat = if matches!(clip.kind, ClipKind::Midi(_)) { snap(beat) } else { beat };
-        let (left, right) =
-            split_data(&clip, beat - clip.start, self.project.bpm, self.project.sr).ok_or("the playhead is not inside the clip")?;
+        let clip = self
+            .project
+            .tracks
+            .get(t)
+            .and_then(|tr| tr.clips.get(c))
+            .ok_or("no such clip")?
+            .clone();
+        let beat = if matches!(clip.kind, ClipKind::Midi(_)) {
+            snap(beat)
+        } else {
+            beat
+        };
+        let (left, right) = split_data(&clip, beat - clip.start, self.project.bpm, self.project.sr)
+            .ok_or("the playhead is not inside the clip")?;
         self.checkpoint();
         let tr = &mut self.project.tracks[t];
         tr.clips[c] = left;
@@ -160,11 +195,27 @@ impl App {
     }
 
     /// Keep only the right (or left) part of a clip, cut at an absolute position.
-    pub fn trim_clip(&mut self, t: usize, c: usize, beat: f64, keep_right: bool) -> Result<(), String> {
-        let clip = self.project.tracks.get(t).and_then(|tr| tr.clips.get(c)).ok_or("no such clip")?.clone();
-        let beat = if matches!(clip.kind, ClipKind::Midi(_)) { snap(beat) } else { beat };
-        let (left, right) =
-            split_data(&clip, beat - clip.start, self.project.bpm, self.project.sr).ok_or("the playhead is not inside the clip")?;
+    pub fn trim_clip(
+        &mut self,
+        t: usize,
+        c: usize,
+        beat: f64,
+        keep_right: bool,
+    ) -> Result<(), String> {
+        let clip = self
+            .project
+            .tracks
+            .get(t)
+            .and_then(|tr| tr.clips.get(c))
+            .ok_or("no such clip")?
+            .clone();
+        let beat = if matches!(clip.kind, ClipKind::Midi(_)) {
+            snap(beat)
+        } else {
+            beat
+        };
+        let (left, right) = split_data(&clip, beat - clip.start, self.project.bpm, self.project.sr)
+            .ok_or("the playhead is not inside the clip")?;
         self.checkpoint();
         self.project.tracks[t].clips[c] = if keep_right { right } else { left };
         self.select_clip(t, c);
@@ -174,7 +225,9 @@ impl App {
 
     /// Cut note `i` of a MIDI clip at `cut` beats (relative to the clip). False if `cut` is not inside the note.
     pub fn split_note(&mut self, t: usize, c: usize, i: usize, cut: f64) -> bool {
-        let Some(n) = self.notes_ref(t, c).and_then(|v| v.get(i)).cloned() else { return false };
+        let Some(n) = self.notes_ref(t, c).and_then(|v| v.get(i)).cloned() else {
+            return false;
+        };
         if cut <= n.start + 0.01 || cut >= n.start + n.len - 0.01 {
             return false;
         }
@@ -204,17 +257,31 @@ impl App {
                 n.len *= f;
             }
         }
-        if let Some(cl) = self.project.tracks.get_mut(t).and_then(|tr| tr.clips.get_mut(c)) {
+        if let Some(cl) = self
+            .project
+            .tracks
+            .get_mut(t)
+            .and_then(|tr| tr.clips.get_mut(c))
+        {
             cl.len = (cl.len * f).max(0.25);
         }
         self.push();
-        self.status = if f < 1.0 { "Clip compressed.".into() } else { "Clip stretched.".into() };
+        self.status = if f < 1.0 {
+            "Clip compressed.".into()
+        } else {
+            "Clip stretched.".into()
+        };
     }
 
     pub fn split_at_playhead(&mut self) {
         // a selected note under the playhead is cut first
         if let (Some((t, c)), Some(i)) = (self.sel_clip, self.sel_note) {
-            let cut = self.project.tracks.get(t).and_then(|tr| tr.clips.get(c)).map(|cl| self.pos_beats - cl.start);
+            let cut = self
+                .project
+                .tracks
+                .get(t)
+                .and_then(|tr| tr.clips.get(c))
+                .map(|cl| self.pos_beats - cl.start);
             if let Some(cut) = cut {
                 if self.split_note(t, c, i, cut) {
                     self.status = "Note cut at the playhead.".into();
@@ -266,7 +333,13 @@ impl App {
                 return true;
             }
         }
-        match self.project.tracks.get(t).and_then(|tr| tr.clips.get(c)).cloned() {
+        match self
+            .project
+            .tracks
+            .get(t)
+            .and_then(|tr| tr.clips.get(c))
+            .cloned()
+        {
             Some(clip) => {
                 self.clipboard = Some(Clipboard::Clip(clip));
                 self.status = "Clip copied. Move the playhead and press Ctrl+V.".into();
@@ -335,7 +408,13 @@ impl App {
 
     pub fn audio_process(&mut self, op: AudioOp) {
         let Some((t, c)) = self.sel_clip else { return };
-        let data = match self.project.tracks.get(t).and_then(|tr| tr.clips.get(c)).map(|cl| &cl.kind) {
+        let data = match self
+            .project
+            .tracks
+            .get(t)
+            .and_then(|tr| tr.clips.get(c))
+            .map(|cl| &cl.kind)
+        {
             Some(ClipKind::Audio(d)) => d.clone(),
             _ => {
                 self.status = "Select an audio clip first.".into();
@@ -394,11 +473,15 @@ impl App {
             ui.spacing_mut().item_spacing.x = 5.0;
             ui.add_space(14.0);
             let chip = |ui: &mut egui::Ui, label: &str, sel: bool| -> bool {
-                let b = egui::Button::new(RichText::new(label).size(12.5).color(if sel { Color32::WHITE } else { INK }))
-                    .fill(if sel { ACCENT } else { soft })
-                    .stroke(egui::Stroke::NONE)
-                    .rounding(Rounding::same(12.0))
-                    .min_size(vec2(0.0, 24.0));
+                let b = egui::Button::new(RichText::new(label).size(12.5).color(if sel {
+                    Color32::WHITE
+                } else {
+                    INK
+                }))
+                .fill(if sel { ACCENT } else { soft })
+                .stroke(egui::Stroke::NONE)
+                .rounding(Rounding::same(12.0))
+                .min_size(vec2(0.0, 24.0));
                 ui.add(b).clicked()
             };
             if chip(ui, "Piano roll", self.detail == DetailTab::Roll) {
@@ -416,18 +499,24 @@ impl App {
                 // options only appear while the pen is active
                 ui.add_space(6.0);
                 ui.label(RichText::new("Grid").size(11.5).color(GREY));
-                egui::ComboBox::new("pen_grid", "").width(62.0).selected_text(size_label(self.grid)).show_ui(ui, |ui| {
-                    for (lab, v) in SIZES {
-                        ui.selectable_value(&mut self.grid, v, lab);
-                    }
-                });
+                egui::ComboBox::new("pen_grid", "")
+                    .width(62.0)
+                    .selected_text(size_label(self.grid))
+                    .show_ui(ui, |ui| {
+                        for (lab, v) in SIZES {
+                            ui.selectable_value(&mut self.grid, v, lab);
+                        }
+                    });
                 ui.label(RichText::new("Size").size(11.5).color(GREY));
                 let before = self.last_len;
-                egui::ComboBox::new("pen_size", "").width(62.0).selected_text(size_label(self.last_len)).show_ui(ui, |ui| {
-                    for (lab, v) in SIZES {
-                        ui.selectable_value(&mut self.last_len, v, lab);
-                    }
-                });
+                egui::ComboBox::new("pen_size", "")
+                    .width(62.0)
+                    .selected_text(size_label(self.last_len))
+                    .show_ui(ui, |ui| {
+                        for (lab, v) in SIZES {
+                            ui.selectable_value(&mut self.last_len, v, lab);
+                        }
+                    });
                 if (self.last_len - before).abs() > 1e-9 {
                     // the chosen size also applies to the selected note
                     if let (Some((t, c)), Some(i)) = (self.sel_clip, self.sel_note) {
@@ -479,13 +568,22 @@ impl App {
                     }
                 });
             } else {
-                ui.label(RichText::new("Click the pen to edit").size(11.5).color(GREY));
+                ui.label(
+                    RichText::new("Click the pen to edit")
+                        .size(11.5)
+                        .color(GREY),
+                );
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if self.pen {
                     if let (Some((t, c)), Some(mut len)) = (self.sel_clip, midi_len) {
-                        let r = ui.add(egui::DragValue::new(&mut len).range(0.25..=1024.0).speed(0.25).suffix(" beats"));
+                        let r = ui.add(
+                            egui::DragValue::new(&mut len)
+                                .range(0.25..=1024.0)
+                                .speed(0.25)
+                                .suffix(" beats"),
+                        );
                         ui.label(RichText::new("Clip length").size(11.5).color(GREY));
                         if r.changed() {
                             self.edit_checkpoint(&ctx);
@@ -535,8 +633,17 @@ pub fn pen_button(ui: &mut egui::Ui, active: bool) -> bool {
     let d = vec2(1.0, -1.0).normalized();
     let n = vec2(1.0, 1.0).normalized();
     let tip = c - d * 6.5;
-    let body = vec![tip, tip + d * 4.0 + n * 2.6, tip + d * 13.0 + n * 2.6, tip + d * 13.0 - n * 2.6, tip + d * 4.0 - n * 2.6];
+    let body = vec![
+        tip,
+        tip + d * 4.0 + n * 2.6,
+        tip + d * 13.0 + n * 2.6,
+        tip + d * 13.0 - n * 2.6,
+        tip + d * 4.0 - n * 2.6,
+    ];
     p.add(egui::Shape::closed_line(body, stroke(1.6, fg)));
-    p.line_segment([tip + d * 4.0 + n * 2.6, tip + d * 4.0 - n * 2.6], stroke(1.2, fg));
+    p.line_segment(
+        [tip + d * 4.0 + n * 2.6, tip + d * 4.0 - n * 2.6],
+        stroke(1.2, fg),
+    );
     resp.clicked()
 }

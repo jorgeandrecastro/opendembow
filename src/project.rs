@@ -105,8 +105,17 @@ impl Track {
     }
 
     /// Récupère la valeur interpolée d'un paramètre automatisé à un battement (beat) précis
-    pub fn get_automation_value(&self, parameter_id: &str, current_beat: f64, default_value: f32) -> f32 {
-        let Some(lane) = self.automations.iter().find(|l| l.parameter_id == parameter_id) else {
+    pub fn get_automation_value(
+        &self,
+        parameter_id: &str,
+        current_beat: f64,
+        default_value: f32,
+    ) -> f32 {
+        let Some(lane) = self
+            .automations
+            .iter()
+            .find(|l| l.parameter_id == parameter_id)
+        else {
             return default_value;
         };
         if lane.points.is_empty() {
@@ -153,38 +162,101 @@ impl Project {
 
     /// A small starter song so that pressing play makes sound immediately.
     pub fn demo(sr: f32) -> Self {
-        let prog = [([57u8, 60, 64], 33u8), ([53, 57, 60], 29), ([60, 64, 67], 36), ([55, 59, 62], 31)];
+        let prog = [
+            ([57u8, 60, 64], 33u8),
+            ([53, 57, 60], 29),
+            ([60, 64, 67], 36),
+            ([55, 59, 62], 31),
+        ];
         let (mut keys, mut bass) = (Vec::new(), Vec::new());
         for (i, (chord, root)) in prog.iter().enumerate() {
             let s = i as f64 * 4.0;
             for &k in chord {
-                keys.push(Note { start: s, len: 3.8, key: k, vel: 0.7 });
+                keys.push(Note {
+                    start: s,
+                    len: 3.8,
+                    key: k,
+                    vel: 0.7,
+                });
             }
-            bass.push(Note { start: s, len: 1.8, key: *root, vel: 0.9 });
-            bass.push(Note { start: s + 2.0, len: 1.8, key: *root, vel: 0.8 });
+            bass.push(Note {
+                start: s,
+                len: 1.8,
+                key: *root,
+                vel: 0.9,
+            });
+            bass.push(Note {
+                start: s + 2.0,
+                len: 1.8,
+                key: *root,
+                vel: 0.8,
+            });
         }
         let mut piano = Track::new("Grand Piano", TrackKind::Instrument(Instrument::Piano), 0);
-        piano.clips.push(Clip { name: "Chords".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(keys) });
-        let mut b = Track::new("Synth Bass", TrackKind::Instrument(Instrument::SynthBass), 1);
-        b.clips.push(Clip { name: "Bass".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(bass) });
+        piano.clips.push(Clip {
+            name: "Chords".into(),
+            start: 0.0,
+            len: 16.0,
+            kind: ClipKind::Midi(keys),
+        });
+        let mut b = Track::new(
+            "Synth Bass",
+            TrackKind::Instrument(Instrument::SynthBass),
+            1,
+        );
+        b.clips.push(Clip {
+            name: "Bass".into(),
+            start: 0.0,
+            len: 16.0,
+            kind: ClipKind::Midi(bass),
+        });
 
         // Dembow beat: kick on every beat, snares on the 3+3+2 accents, hi-hats on the eighths.
         let mut beat = Vec::new();
         for bar in 0..4 {
             let b0 = bar as f64 * 4.0;
             for i in 0..4 {
-                beat.push(Note { start: b0 + i as f64, len: 0.2, key: 36, vel: 0.95 });
+                beat.push(Note {
+                    start: b0 + i as f64,
+                    len: 0.2,
+                    key: 36,
+                    vel: 0.95,
+                });
             }
             for s in [0.75, 1.5, 2.75, 3.5] {
-                beat.push(Note { start: b0 + s, len: 0.2, key: 38, vel: 0.85 });
+                beat.push(Note {
+                    start: b0 + s,
+                    len: 0.2,
+                    key: 38,
+                    vel: 0.85,
+                });
             }
             for i in 0..8 {
-                beat.push(Note { start: b0 + i as f64 * 0.5, len: 0.1, key: 42, vel: if i % 2 == 0 { 0.6 } else { 0.4 } });
+                beat.push(Note {
+                    start: b0 + i as f64 * 0.5,
+                    len: 0.1,
+                    key: 42,
+                    vel: if i % 2 == 0 { 0.6 } else { 0.4 },
+                });
             }
         }
-        let mut drums = Track::new("Reggaeton Kit", TrackKind::Instrument(Instrument::ReggaetonKit), 2);
-        drums.clips.push(Clip { name: "Dembow".into(), start: 0.0, len: 16.0, kind: ClipKind::Midi(beat) });
+        let mut drums = Track::new(
+            "Reggaeton Kit",
+            TrackKind::Instrument(Instrument::ReggaetonKit),
+            2,
+        );
+        drums.clips.push(Clip {
+            name: "Dembow".into(),
+            start: 0.0,
+            len: 16.0,
+            kind: ClipKind::Midi(beat),
+        });
 
-        Project { sr, bpm: 100.0, tracks: vec![piano, b, drums], loop_region: None }
+        Project {
+            sr,
+            bpm: 100.0,
+            tracks: vec![piano, b, drums],
+            loop_region: None,
+        }
     }
 }

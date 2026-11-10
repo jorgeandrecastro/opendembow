@@ -10,7 +10,12 @@ fn path() -> Option<PathBuf> {
 pub fn load() -> HashSet<String> {
     path()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .map(|s| s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+        .map(|s| {
+            s.lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 

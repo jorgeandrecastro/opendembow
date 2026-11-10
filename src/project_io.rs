@@ -12,7 +12,12 @@ fn clean(s: &str) -> String {
 }
 
 fn write_wav_f32(path: &Path, data: &[f32], sr: u32) -> Result<(), String> {
-    let spec = hound::WavSpec { channels: 1, sample_rate: sr, bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: sr,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
     let mut w = hound::WavWriter::create(path, spec).map_err(|e| e.to_string())?;
     for &s in data {
         w.write_sample(s).map_err(|e| e.to_string())?;
@@ -31,7 +36,10 @@ fn write_wav_f32(path: &Path, data: &[f32], sr: u32) -> Result<(), String> {
 /// Automation points are stored as `auto<TAB>parameter<TAB>beat<TAB>value` lines, one per point,
 /// after the `fx` lines of their track.
 pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "project".into());
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".into());
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     let mut out = String::new();
     let mut n_audio = 0;
@@ -45,7 +53,17 @@ pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
             TrackKind::Instrument(i) => i.name().to_string(),
             TrackKind::Audio => "audio".to_string(),
         };
-        let _ = writeln!(out, "track\t{}\t{}\t{}\t{}\t{}\t{}\t{}", kind, t.color, t.volume, t.pan, t.mute as u8, t.solo as u8, clean(&t.name));
+        let _ = writeln!(
+            out,
+            "track\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            kind,
+            t.color,
+            t.volume,
+            t.pan,
+            t.mute as u8,
+            t.solo as u8,
+            clean(&t.name)
+        );
         if t.fx != FxSettings::default() {
             for (key, v) in t.fx.params() {
                 let _ = writeln!(out, "fx\t{}\t{}", key, v as f32);
@@ -53,13 +71,25 @@ pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
         }
         for lane in &t.automations {
             for pt in &lane.points {
-                let _ = writeln!(out, "auto\t{}\t{}\t{}", clean(&lane.parameter_id), pt.beat, pt.value);
+                let _ = writeln!(
+                    out,
+                    "auto\t{}\t{}\t{}",
+                    clean(&lane.parameter_id),
+                    pt.beat,
+                    pt.value
+                );
             }
         }
         for c in &t.clips {
             match &c.kind {
                 ClipKind::Midi(notes) => {
-                    let _ = writeln!(out, "clip\tmidi\t{}\t{}\t{}", c.start, c.len, clean(&c.name));
+                    let _ = writeln!(
+                        out,
+                        "clip\tmidi\t{}\t{}\t{}",
+                        c.start,
+                        c.len,
+                        clean(&c.name)
+                    );
                     for n in notes {
                         let _ = writeln!(out, "note\t{}\t{}\t{}\t{}", n.start, n.len, n.key, n.vel);
                     }
@@ -68,7 +98,13 @@ pub fn save_project(p: &Project, path: &Path) -> Result<(), String> {
                     let file = format!("{stem}.audio{n_audio}.wav");
                     n_audio += 1;
                     write_wav_f32(&dir.join(&file), data, p.sr as u32)?;
-                    let _ = writeln!(out, "clip\taudio\t{}\t{}\t{}", c.start, file, clean(&c.name));
+                    let _ = writeln!(
+                        out,
+                        "clip\taudio\t{}\t{}\t{}",
+                        c.start,
+                        file,
+                        clean(&c.name)
+                    );
                 }
             }
         }
@@ -83,7 +119,12 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
     if !lines.next().unwrap_or("").starts_with("OPENDEMBOW") {
         return Err("Not an OpenDembow project".into());
     }
-    let mut p = Project { sr, bpm: 100.0, tracks: Vec::new(), loop_region: None };
+    let mut p = Project {
+        sr,
+        bpm: 100.0,
+        tracks: Vec::new(),
+        loop_region: None,
+    };
     for line in lines {
         let f: Vec<&str> = line.split('\t').collect();
         match f.first().copied() {
@@ -92,7 +133,11 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
             Some("loop") if f.len() >= 4 => {
                 if let (Ok(s), Ok(e)) = (f[1].parse::<f64>(), f[2].parse::<f64>()) {
                     if s.is_finite() && e.is_finite() && s >= 0.0 && e > s {
-                        p.loop_region = Some(LoopRegion { start: s, end: e, on: f[3] == "1" });
+                        p.loop_region = Some(LoopRegion {
+                            start: s,
+                            end: e,
+                            on: f[3] == "1",
+                        });
                     }
                 }
             }
@@ -100,7 +145,13 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
                 let kind = if f[1] == "audio" {
                     TrackKind::Audio
                 } else {
-                    TrackKind::Instrument(Instrument::ALL.iter().copied().find(|i| i.name() == f[1]).unwrap_or(Instrument::Piano))
+                    TrackKind::Instrument(
+                        Instrument::ALL
+                            .iter()
+                            .copied()
+                            .find(|i| i.name() == f[1])
+                            .unwrap_or(Instrument::Piano),
+                    )
                 };
                 let mut t = Track::new(f[7], kind, f[2].parse().unwrap_or(0));
                 t.volume = f[3].parse().unwrap_or(0.8);
@@ -121,16 +172,25 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
             // Automation point of the last track: `auto<TAB>parameter<TAB>beat<TAB>value`.
             // Old projects have no such lines. Points are sorted once the whole file is read.
             Some("auto") if f.len() >= 4 => {
-                if let (Some(t), Ok(beat), Ok(value)) = (p.tracks.last_mut(), f[2].parse::<f64>(), f[3].parse::<f32>()) {
+                if let (Some(t), Ok(beat), Ok(value)) = (
+                    p.tracks.last_mut(),
+                    f[2].parse::<f64>(),
+                    f[3].parse::<f32>(),
+                ) {
                     if beat.is_finite() && value.is_finite() && beat >= 0.0 {
                         let i = match t.automations.iter().position(|l| l.parameter_id == f[1]) {
                             Some(i) => i,
                             None => {
-                                t.automations.push(AutomationLane { parameter_id: f[1].to_string(), points: Vec::new() });
+                                t.automations.push(AutomationLane {
+                                    parameter_id: f[1].to_string(),
+                                    points: Vec::new(),
+                                });
                                 t.automations.len() - 1
                             }
                         };
-                        t.automations[i].points.push(AutomationPoint { beat, value });
+                        t.automations[i]
+                            .points
+                            .push(AutomationPoint { beat, value });
                     }
                 }
             }
@@ -138,15 +198,29 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
                 if let Some(t) = p.tracks.last_mut() {
                     let start = f[2].parse().unwrap_or(0.0);
                     if f[1] == "midi" {
-                        t.clips.push(Clip { name: f[4].into(), start, len: f[3].parse().unwrap_or(4.0), kind: ClipKind::Midi(Vec::new()) });
+                        t.clips.push(Clip {
+                            name: f[4].into(),
+                            start,
+                            len: f[3].parse().unwrap_or(4.0),
+                            kind: ClipKind::Midi(Vec::new()),
+                        });
                     } else {
                         let data = crate::audio_io::load_wav(&dir.join(f[3]), sr)?;
-                        t.clips.push(Clip { name: f[4].into(), start, len: 0.0, kind: ClipKind::Audio(Arc::new(data)) });
+                        t.clips.push(Clip {
+                            name: f[4].into(),
+                            start,
+                            len: 0.0,
+                            kind: ClipKind::Audio(Arc::new(data)),
+                        });
                     }
                 }
             }
             Some("note") if f.len() >= 5 => {
-                if let Some(Clip { kind: ClipKind::Midi(n), .. }) = p.tracks.last_mut().and_then(|t| t.clips.last_mut()) {
+                if let Some(Clip {
+                    kind: ClipKind::Midi(n),
+                    ..
+                }) = p.tracks.last_mut().and_then(|t| t.clips.last_mut())
+                {
                     n.push(Note {
                         start: f[1].parse().unwrap_or(0.0),
                         len: f[2].parse().unwrap_or(0.25),
@@ -160,7 +234,11 @@ pub fn load_project(path: &Path, sr: f32) -> Result<Project, String> {
     }
     for t in &mut p.tracks {
         for lane in &mut t.automations {
-            lane.points.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
+            lane.points.sort_by(|a, b| {
+                a.beat
+                    .partial_cmp(&b.beat)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
     }
     Ok(p)
@@ -188,12 +266,21 @@ pub fn export_midi(p: &Project, path: &Path) -> Result<(), String> {
     let mut t0 = Vec::new();
     let us = (60_000_000.0 / p.bpm) as u32;
     vlq(0, &mut t0);
-    t0.extend([0xFFu8, 0x51, 0x03, (us >> 16) as u8, (us >> 8) as u8, us as u8]);
+    t0.extend([
+        0xFFu8,
+        0x51,
+        0x03,
+        (us >> 16) as u8,
+        (us >> 8) as u8,
+        us as u8,
+    ]);
     vlq(0, &mut t0);
     t0.extend([0xFFu8, 0x2F, 0x00]);
     tracks.push(t0);
     for (ti, t) in p.tracks.iter().enumerate() {
-        let TrackKind::Instrument(_) = t.kind else { continue };
+        let TrackKind::Instrument(_) = t.kind else {
+            continue;
+        };
         let mut ev: Vec<(u32, u8, u8, u8)> = Vec::new();
         for c in &t.clips {
             if let ClipKind::Midi(notes) = &c.kind {

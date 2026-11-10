@@ -1,6 +1,7 @@
-# OpenDembow 0.10
+# OpenDembow 0.11
 
 ![OpenDembow Interface](images/image1.png)
+![OpenDembow Interface](images/image4.png)
 ![OpenDembow Interface](images/image2.png)
 ![OpenDembow Interface](images/image3.png)
 
@@ -14,7 +15,7 @@ cargo run --release
 
 Requires stable Rust (https://rustup.rs). On Linux: `sudo apt install libasound2-dev pkg-config` (used for both audio output and MIDI input).
 
-Dependencies in `Cargo.toml` (0.10 adds none: the FFT and the lock-free audio tap are written in the project):
+Dependencies in `Cargo.toml` (0.11 adds no dependencies):
 
 ```toml
 eframe = "0.29"
@@ -25,7 +26,20 @@ serde_json = "1"   # MCP server
 midir = "0.11"     # MIDI input
 ```
 
-Set `version = "0.10.0"` in `Cargo.toml`: the version number shown in the transport bar follows it.
+Set `version = "0.11.0"` in `Cargo.toml`: the version number shown in the transport bar follows it.
+
+## What's new in 0.11
+**Visual equalizer**
+- Three draggable points control the low, mid and high bands directly on the equalizer's response curve, calculated from the filters themselves; each point adjusts frequency and gain
+- The Master spectrum is shown behind the curve (a per-track spectrum is not available)
+- Use the mouse wheel on the Mid point to adjust its Q (width); double-click a point to reset it
+- Touching a point enables the EQ, and a label shows its frequency, gain and Q
+- Existing controls remain available, with a new **Mid Q** control. The new `eq.low_freq`, `eq.mid_q` and `eq.high_freq` settings default to the existing sound, preserving older projects' sound
+
+**Compressor transfer curve and gain-reduction meter**
+- The transfer curve plots input and output in dB, with a dotted 1:1 line and a shaded gain-reduction area
+- Drag the knee to adjust the threshold and the right endpoint to adjust the ratio; a live point follows the track level
+- A 0-24 dB gain-reduction meter accompanies the curve
 
 ## What's new in 0.10
 **Rock-solid loops: the loop now runs inside the audio engine**
@@ -43,51 +57,6 @@ Set `version = "0.10.0"` in `Cargo.toml`: the version number shown in the transp
 - Older projects still open (they simply have no loop and no automation)
 - The version number in the transport bar now really follows `Cargo.toml` (it used to show a fixed number)
 
-## What's new in 0.9
-**See your sound: Master spectrum and dBFS meters**
-- A **Master** card in the Mixer & Effects tab shows a real-time **spectrum analyzer**: 4096-point FFT (Hann window), logarithmic frequency axis from 20 Hz to 20 kHz, level in dB, smooth gradient curve
-- Hover the spectrum to read the **frequency, the nearest note and the level** under the cursor
-- **Hold** keeps a thin peak curve that falls slowly; **Tilt** adds +4.5 dB per octave so the spectrum looks like what you hear
-- Two thin **stereo dBFS meters** (-60 to 0 dB) with green / amber / red zones, a peak-hold line and a **clip LED**; click to reset. The Master meters read the signal before the soft limiter, so an over 0 dBFS is never hidden
-- Every track strip in the mixer now has the same **dBFS meter** (hover for the held peak, click to reset); the small level bar in the track headers follows the same dB scale
-- The audio thread only writes atomics into a ring buffer: **no lock and no allocation** for the analyzer, the FFT runs in the interface thread
-
-**A calmer interface for beginners**
-- **Hide what you do not use**: the instrument browser, the piano roll & mixer panel and the on-screen keyboard each have a small **panel icon** (a window with a filled side). Hover it: the tooltip says *Hide ...*
-- A hidden panel collapses into a thin strip with a **blue** icon and its name; one click brings it back. Nothing ever disappears for good
-- **View menu** with the three panels, **Focus on the timeline** (everything hidden, more room for the arrangement) and **Show everything**
-- The version number in the transport bar now follows `Cargo.toml`
-
-## What's new in 0.8
-**Ableton-style note editing in the piano roll**
-- **Multi-selection**: drag a rectangle on empty space, `Shift+click` to add / remove notes, `Ctrl+A` to select all, `Esc` to deselect
-- **Group editing**: moving or resizing a selected note moves or resizes the whole selection, keeping intervals and spacing
-- **Alt = no snap**: hold `Alt` while dragging, drawing or resizing to ignore the grid
-- **Keyboard editing**: `↑ ↓` transpose by a semitone, `Shift+↑ ↓` by an octave, `← →` nudge by one grid step, `Shift+← →` change note length
-- **Quantize** (`Ctrl+U`): snap the start of the selected notes to the grid
-- **Duplicate** (`Ctrl+D`): copies the selected notes right after themselves (with no note selected, it duplicates the clip as before)
-- **Velocity badge**: hover or select a note and a small **V** badge appears just after it; its fill shows the velocity at a glance, and a click opens a vertical slider (1-127). The whole selection follows
-- **Copy / cut / paste several notes** at once; pasted notes become the selection, and the pen's Size setting applies to every selected note
-- Right-click on a selected note deletes the whole selection
-
-**Loops, Ableton style**
-- A thin **loop bar** sits above the bar numbers. Drag in it to draw the part that repeats, drag the brace to move it, drag its edges to resize it (`Alt` = no snap)
-- The brace is amber when the loop is on and grey when it is off; the looped region is tinted on the timeline
-- Click the brace, press `Ctrl+L` or use the **Loop** button in the transport bar to switch it on or off; `Ctrl+Shift+L` loops the selected clip
-- Right-click the bar for more: loop the selected clip, or loop 1 / 2 / 4 / 8 bars from the playhead
-- The playhead jumps back at the end of the loop (sample-accurate since 0.10)
-
-**Volume automation, redesigned**
-- Each track has a pink automation lane under its clips, separate from the clips
-- **0 / 50 / 100 %** guides are always visible, and values snap to them (`Alt` = free)
-- A **ghost point** shows exactly where a click will place a point, with its value
-- Click to add a point, drag a point to move it, right-click a point to delete it
-
-**Timeline and playhead**
-- The red playhead is a real handle: open hand on hover, closed hand while dragging. It snaps to the grid (`Alt` = free) and shows its position (`bar.beat.sixteenth`)
-- Clicking or dragging in the ruler moves the playhead, with a hover guide
-- **Reorder tracks**: drag a track header; a blue line shows where the track will land
-- **Instrument drops**: dropping an instrument on the middle of a track swaps its instrument and keeps every clip and note; dropping near the edge between two tracks inserts a new track there
 
 ## Features
 - **33 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, Drums & Percussion
@@ -292,7 +261,7 @@ The piano roll's note selection and scale choice, the analyzer options (Hold / T
 - `arrangement.rs` timeline: track headers, ruler, clips, playhead - `loops.rs` loop bar and loop region (sends the range to the engine, which does the wrapping; hands the range to / takes it from the project on save / open) - `automation.rs` volume automation lanes
 - `pianoroll.rs` note editing, multi-selection, scales - `velocity.rs` the V badge and its velocity slider
 - `keyboard.rs`, `chrome.rs` (menus, instrument browser, favourites, help), `theme.rs` interface
-- `effects.rs` effect settings, DSP (`FxProcessor`) and the Mixer & Effects panel
+- `effects.rs` effect settings and DSP (`FxProcessor`) - `mixer.rs` Mixer & Effects panel - `curves.rs` visual equalizer, compressor transfer curve and gain-reduction meter
 - `edit.rs` split / trim / clipboard / audio tools and the bottom-panel tabs
 - `record.rs` recording with count-in - `midi_in.rs` MIDI keyboard input (midir)
 - `favorites.rs` favourite instruments (saved in the home folder)
@@ -306,8 +275,7 @@ The piano roll's note selection and scale choice, the analyzer options (Hold / T
 3. Write its sound in `Voice::next` (or in `extra_voices.rs` / `drums.rs` to keep files short).
 
 ## Roadmap
-Next (0.10.x / 0.11): visual equalizer (drag points on the response curve, spectrum behind it), compressor transfer curve with gain-reduction meter,
-automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout,
+Next (0.11.x): automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout,
 LUFS and stereo correlation meters, waveforms with a dB scale.
 
 Later: step sequencer, audio recording, quantization while recording, fold-to-scale in the piano roll, dark theme, a "Designer" synth with filter / envelopes / LFO,

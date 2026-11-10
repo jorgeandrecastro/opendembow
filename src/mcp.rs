@@ -5,12 +5,12 @@
 //! Requests are read on a background thread and executed on the UI thread (`App::mcp_poll`),
 //! so the window always reflects what the assistant does and undo/redo keeps working.
 
+use crate::App;
 use crate::instruments::Instrument;
 use crate::project::*;
-use crate::App;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, Write};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 
 pub struct Call {
@@ -31,7 +31,11 @@ fn tool(name: &str, desc: &str, props: Value, required: &[&str]) -> Value {
 }
 
 fn tools() -> Value {
-    let fx_names: Vec<&str> = crate::effects::FxSettings::default().params().into_iter().map(|(k, _)| k).collect();
+    let fx_names: Vec<&str> = crate::effects::FxSettings::default()
+        .params()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
     let note = json!({ "type": "object", "properties": {
         "start": { "type": "number", "description": "beats from the start of the clip" },
         "length": { "type": "number", "description": "beats" },
@@ -39,26 +43,94 @@ fn tools() -> Value {
         "velocity": { "type": "number", "description": "0.0-1.0, default 0.8" } },
         "required": ["start", "length", "key"] });
     json!([
-        tool("get_project", "Tempo, transport state, tracks, clips, mixer and effect settings.", json!({}), &[]),
-        tool("list_instruments", "All built-in instruments with their category (including the Drum Kit and 808 Kit).", json!({}), &[]),
-        tool("get_notes", "Notes of a MIDI clip.", json!({ "track": {"type":"integer"}, "clip": {"type":"integer"} }), &["track", "clip"]),
-        tool("set_tempo", "Set the tempo (40-240 BPM).", json!({ "bpm": {"type":"number"} }), &["bpm"]),
-        tool("add_track", "Add an instrument track (name from list_instruments, case-insensitive).", json!({ "instrument": {"type":"string"} }), &["instrument"]),
-        tool("delete_track", "Delete a track.", json!({ "track": {"type":"integer"} }), &["track"]),
-        tool("add_midi_clip", "Create an empty MIDI clip on an instrument track.", json!({
+        tool(
+            "get_project",
+            "Tempo, transport state, tracks, clips, mixer and effect settings.",
+            json!({}),
+            &[]
+        ),
+        tool(
+            "list_instruments",
+            "All built-in instruments with their category (including the Drum Kit and 808 Kit).",
+            json!({}),
+            &[]
+        ),
+        tool(
+            "get_notes",
+            "Notes of a MIDI clip.",
+            json!({ "track": {"type":"integer"}, "clip": {"type":"integer"} }),
+            &["track", "clip"]
+        ),
+        tool(
+            "set_tempo",
+            "Set the tempo (40-240 BPM).",
+            json!({ "bpm": {"type":"number"} }),
+            &["bpm"]
+        ),
+        tool(
+            "add_track",
+            "Add an instrument track (name from list_instruments, case-insensitive).",
+            json!({ "instrument": {"type":"string"} }),
+            &["instrument"]
+        ),
+        tool(
+            "delete_track",
+            "Delete a track.",
+            json!({ "track": {"type":"integer"} }),
+            &["track"]
+        ),
+        tool(
+            "add_midi_clip",
+            "Create an empty MIDI clip on an instrument track.",
+            json!({
             "track": {"type":"integer"}, "start": {"type":"number","description":"beats on the timeline"},
-            "length": {"type":"number","description":"beats, default 4"}, "name": {"type":"string"} }), &["track"]),
-        tool("add_notes", "Add notes to a MIDI clip (the clip grows if needed). For drums use the General MIDI drum keys described in the note schema.", json!({
-            "track": {"type":"integer"}, "clip": {"type":"integer"}, "notes": {"type":"array","items": note} }), &["track", "clip", "notes"]),
-        tool("delete_clip", "Delete a clip.", json!({ "track": {"type":"integer"}, "clip": {"type":"integer"} }), &["track", "clip"]),
-        tool("split_clip", "Split a clip at an absolute timeline position (beats).", json!({
-            "track": {"type":"integer"}, "clip": {"type":"integer"}, "beat": {"type":"number"} }), &["track", "clip", "beat"]),
-        tool("set_track", "Mixer settings of a track (any of volume 0-1, pan -1..1, mute, solo).", json!({
+            "length": {"type":"number","description":"beats, default 4"}, "name": {"type":"string"} }),
+            &["track"]
+        ),
+        tool(
+            "add_notes",
+            "Add notes to a MIDI clip (the clip grows if needed). For drums use the General MIDI drum keys described in the note schema.",
+            json!({
+            "track": {"type":"integer"}, "clip": {"type":"integer"}, "notes": {"type":"array","items": note} }),
+            &["track", "clip", "notes"]
+        ),
+        tool(
+            "delete_clip",
+            "Delete a clip.",
+            json!({ "track": {"type":"integer"}, "clip": {"type":"integer"} }),
+            &["track", "clip"]
+        ),
+        tool(
+            "split_clip",
+            "Split a clip at an absolute timeline position (beats).",
+            json!({
+            "track": {"type":"integer"}, "clip": {"type":"integer"}, "beat": {"type":"number"} }),
+            &["track", "clip", "beat"]
+        ),
+        tool(
+            "set_track",
+            "Mixer settings of a track (any of volume 0-1, pan -1..1, mute, solo).",
+            json!({
             "track": {"type":"integer"}, "volume": {"type":"number"}, "pan": {"type":"number"},
-            "mute": {"type":"boolean"}, "solo": {"type":"boolean"} }), &["track"]),
-        tool("set_effect", &format!("Set effect parameters of a track. Keys: {}. Booleans: true/false.", fx_names.join(", ")), json!({
-            "track": {"type":"integer"}, "params": {"type":"object","description":"e.g. {\"eq.on\":true,\"eq.low\":3,\"reverb.mix\":0.3}"} }), &["track", "params"]),
-        tool("transport", "Control playback.", json!({ "action": {"type":"string","enum":["play","pause","stop","rewind"]} }), &["action"]),
+            "mute": {"type":"boolean"}, "solo": {"type":"boolean"} }),
+            &["track"]
+        ),
+        tool(
+            "set_effect",
+            &format!(
+                "Set effect parameters of a track. Keys: {}. Booleans: true/false.",
+                fx_names.join(", ")
+            ),
+            json!({
+            "track": {"type":"integer"}, "params": {"type":"object","description":"e.g. {\"eq.on\":true,\"eq.low\":3,\"reverb.mix\":0.3}"} }),
+            &["track", "params"]
+        ),
+        tool(
+            "transport",
+            "Control playback.",
+            json!({ "action": {"type":"string","enum":["play","pause","stop","rewind"]} }),
+            &["action"]
+        ),
         tool("undo", "Undo the last change.", json!({}), &[]),
         tool("redo", "Redo.", json!({}), &[]),
     ])
@@ -75,8 +147,12 @@ fn serve(tx: Sender<Call>, ctx: eframe::egui::Context) {
         if line.trim().is_empty() {
             continue;
         }
-        let Ok(msg) = serde_json::from_str::<Value>(&line) else { continue };
-        let Some(id) = msg.get("id").cloned() else { continue }; // notifications need no answer
+        let Ok(msg) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        let Some(id) = msg.get("id").cloned() else {
+            continue;
+        }; // notifications need no answer
         let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
         let params = msg.get("params").cloned().unwrap_or(json!({}));
 
@@ -89,10 +165,21 @@ fn serve(tx: Sender<Call>, ctx: eframe::egui::Context) {
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": tools() })),
             "tools/call" => {
-                let name = params.get("name").and_then(Value::as_str).unwrap_or("").to_string();
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
                 let (rtx, rrx) = channel();
-                if tx.send(Call { tool: name, args, reply: rtx }).is_err() {
+                if tx
+                    .send(Call {
+                        tool: name,
+                        args,
+                        reply: rtx,
+                    })
+                    .is_err()
+                {
                     break;
                 }
                 ctx.request_repaint();
@@ -106,7 +193,9 @@ fn serve(tx: Sender<Call>, ctx: eframe::egui::Context) {
         };
         let out = match result {
             Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
-            Err((code, m)) => json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": m } }),
+            Err((code, m)) => {
+                json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": m } })
+            }
         };
         let mut so = std::io::stdout().lock();
         let _ = writeln!(so, "{out}");
@@ -123,7 +212,10 @@ fn arg_f(a: &Value, k: &str) -> Option<f64> {
 }
 
 fn arg_i(a: &Value, k: &str) -> Result<usize, String> {
-    a.get(k).and_then(Value::as_u64).map(|x| x as usize).ok_or_else(|| format!("missing integer argument '{k}'"))
+    a.get(k)
+        .and_then(Value::as_u64)
+        .map(|x| x as usize)
+        .ok_or_else(|| format!("missing integer argument '{k}'"))
 }
 
 impl App {
@@ -143,7 +235,10 @@ impl App {
         if t < self.project.tracks.len() {
             Ok(t)
         } else {
-            Err(format!("track {t} does not exist (there are {} tracks)", self.project.tracks.len()))
+            Err(format!(
+                "track {t} does not exist (there are {} tracks)",
+                self.project.tracks.len()
+            ))
         }
     }
 
@@ -186,7 +281,10 @@ impl App {
         match tool {
             "get_project" => Ok(self.mcp_snapshot()),
             "list_instruments" => Ok(Value::Array(
-                Instrument::ALL.iter().map(|i| json!({ "name": i.name(), "category": i.category().name() })).collect(),
+                Instrument::ALL
+                    .iter()
+                    .map(|i| json!({ "name": i.name(), "category": i.category().name() }))
+                    .collect(),
             )),
             "get_notes" => {
                 let (t, c) = self.mcp_clip(a)?;
@@ -205,12 +303,21 @@ impl App {
                 Ok(json!({ "bpm": b }))
             }
             "add_track" => {
-                let want = a.get("instrument").and_then(Value::as_str).ok_or("instrument required")?.to_lowercase();
+                let want = a
+                    .get("instrument")
+                    .and_then(Value::as_str)
+                    .ok_or("instrument required")?
+                    .to_lowercase();
                 let inst = Instrument::ALL
                     .iter()
                     .copied()
                     .find(|i| i.name().to_lowercase() == want)
-                    .or_else(|| Instrument::ALL.iter().copied().find(|i| i.name().to_lowercase().contains(&want)))
+                    .or_else(|| {
+                        Instrument::ALL
+                            .iter()
+                            .copied()
+                            .find(|i| i.name().to_lowercase().contains(&want))
+                    })
                     .ok_or_else(|| format!("unknown instrument '{want}', see list_instruments"))?;
                 self.add_track(inst);
                 Ok(json!({ "track": self.project.tracks.len() - 1, "instrument": inst.name() }))
@@ -227,9 +334,18 @@ impl App {
                 }
                 let start = arg_f(a, "start").unwrap_or(0.0).max(0.0);
                 let len = arg_f(a, "length").unwrap_or(4.0).max(0.25);
-                let name = a.get("name").and_then(Value::as_str).unwrap_or("Clip").to_string();
+                let name = a
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Clip")
+                    .to_string();
                 self.checkpoint();
-                self.project.tracks[t].clips.push(Clip { name, start, len, kind: ClipKind::Midi(Vec::new()) });
+                self.project.tracks[t].clips.push(Clip {
+                    name,
+                    start,
+                    len,
+                    kind: ClipKind::Midi(Vec::new()),
+                });
                 let c = self.project.tracks[t].clips.len() - 1;
                 self.select_clip(t, c);
                 self.push();
@@ -240,14 +356,28 @@ impl App {
                 if self.notes_ref(t, c).is_none() {
                     return Err("not a MIDI clip".into());
                 }
-                let arr = a.get("notes").and_then(Value::as_array).ok_or("notes array required")?;
+                let arr = a
+                    .get("notes")
+                    .and_then(Value::as_array)
+                    .ok_or("notes array required")?;
                 let mut notes = Vec::new();
                 for (i, n) in arr.iter().enumerate() {
-                    let start = arg_f(n, "start").ok_or_else(|| format!("note {i}: start required"))?.max(0.0);
-                    let len = arg_f(n, "length").ok_or_else(|| format!("note {i}: length required"))?.max(0.0625);
-                    let key = arg_f(n, "key").ok_or_else(|| format!("note {i}: key required"))?.clamp(0.0, 127.0) as u8;
+                    let start = arg_f(n, "start")
+                        .ok_or_else(|| format!("note {i}: start required"))?
+                        .max(0.0);
+                    let len = arg_f(n, "length")
+                        .ok_or_else(|| format!("note {i}: length required"))?
+                        .max(0.0625);
+                    let key = arg_f(n, "key")
+                        .ok_or_else(|| format!("note {i}: key required"))?
+                        .clamp(0.0, 127.0) as u8;
                     let vel = arg_f(n, "velocity").unwrap_or(0.8).clamp(0.0, 1.0) as f32;
-                    notes.push(Note { start, len, key, vel });
+                    notes.push(Note {
+                        start,
+                        len,
+                        key,
+                        vel,
+                    });
                 }
                 let added = notes.len();
                 self.checkpoint();
@@ -293,10 +423,16 @@ impl App {
             }
             "set_effect" => {
                 let t = self.mcp_track(a)?;
-                let obj = a.get("params").and_then(Value::as_object).ok_or("params object required")?;
+                let obj = a
+                    .get("params")
+                    .and_then(Value::as_object)
+                    .ok_or("params object required")?;
                 let mut fx = self.project.tracks[t].fx.clone();
                 for (k, v) in obj {
-                    let x = v.as_f64().or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 })).ok_or_else(|| format!("'{k}' must be a number or boolean"))?;
+                    let x = v
+                        .as_f64()
+                        .or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 }))
+                        .ok_or_else(|| format!("'{k}' must be a number or boolean"))?;
                     if !fx.set_param(k, x) {
                         return Err(format!("unknown effect parameter '{k}'"));
                     }

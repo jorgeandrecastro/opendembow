@@ -3,9 +3,9 @@
 //! macOS / iOS sidebars. A hidden panel collapses into a thin strip with the same glyph in blue,
 //! so a beginner can always find the way back.
 
-use crate::theme::*;
 use crate::App;
-use eframe::egui::{self, pos2, vec2, Color32, Painter, Pos2, Rect, RichText, Rounding, Sense};
+use crate::theme::*;
+use eframe::egui::{self, Color32, Painter, Pos2, Rect, RichText, Rounding, Sense, pos2, vec2};
 
 /// Which side of the window the panel lives on (drives the glyph).
 #[derive(Clone, Copy, PartialEq)]
@@ -33,17 +33,41 @@ fn paint_glyph(p: &Painter, rect: Rect, side: Side, open: bool, hover: bool) {
             let x = r.left() + 5.5;
             if open {
                 let fill = Rect::from_min_max(r.min + vec2(0.75, 0.75), pos2(x, r.bottom() - 0.75));
-                p.rect_filled(fill, Rounding { nw: 2.0, sw: 2.0, ne: 0.0, se: 0.0 }, col);
+                p.rect_filled(
+                    fill,
+                    Rounding {
+                        nw: 2.0,
+                        sw: 2.0,
+                        ne: 0.0,
+                        se: 0.0,
+                    },
+                    col,
+                );
             }
-            p.line_segment([pos2(x, r.top() + 0.75), pos2(x, r.bottom() - 0.75)], stroke(1.5, col));
+            p.line_segment(
+                [pos2(x, r.top() + 0.75), pos2(x, r.bottom() - 0.75)],
+                stroke(1.5, col),
+            );
         }
         Side::Bottom => {
             let y = r.bottom() - 4.5;
             if open {
                 let fill = Rect::from_min_max(pos2(r.left() + 0.75, y), r.max - vec2(0.75, 0.75));
-                p.rect_filled(fill, Rounding { nw: 0.0, ne: 0.0, sw: 2.0, se: 2.0 }, col);
+                p.rect_filled(
+                    fill,
+                    Rounding {
+                        nw: 0.0,
+                        ne: 0.0,
+                        sw: 2.0,
+                        se: 2.0,
+                    },
+                    col,
+                );
             }
-            p.line_segment([pos2(r.left() + 0.75, y), pos2(r.right() - 0.75, y)], stroke(1.5, col));
+            p.line_segment(
+                [pos2(r.left() + 0.75, y), pos2(r.right() - 0.75, y)],
+                stroke(1.5, col),
+            );
         }
     }
 }
@@ -52,20 +76,37 @@ fn paint_glyph(p: &Painter, rect: Rect, side: Side, open: bool, hover: bool) {
 pub fn panel_button(ui: &mut egui::Ui, side: Side, open: bool, tip: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 22.0), Sense::click());
     paint_glyph(ui.painter(), rect, side, open, resp.hovered());
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip).clicked()
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(tip)
+        .clicked()
 }
 
 /// Toggle floating above the panels at `pos` (optionally on a soft white chip with a light shadow).
-pub fn float_toggle(ctx: &egui::Context, id: &str, pos: Pos2, side: Side, open: bool, tip: &str, chip: bool) -> bool {
+pub fn float_toggle(
+    ctx: &egui::Context,
+    id: &str,
+    pos: Pos2,
+    side: Side,
+    open: bool,
+    tip: &str,
+    chip: bool,
+) -> bool {
     let mut clicked = false;
-    egui::Area::new(egui::Id::new(id)).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
-        if chip {
-            let r = Rect::from_min_size(pos, vec2(30.0, 22.0));
-            ui.painter().rect_filled(r.translate(vec2(0.0, 1.5)).expand(1.0), 12.0, Color32::from_black_alpha(22));
-            ui.painter().rect_filled(r, 11.0, Color32::WHITE);
-        }
-        clicked = panel_button(ui, side, open, tip);
-    });
+    egui::Area::new(egui::Id::new(id))
+        .order(egui::Order::Foreground)
+        .fixed_pos(pos)
+        .show(ctx, |ui| {
+            if chip {
+                let r = Rect::from_min_size(pos, vec2(30.0, 22.0));
+                ui.painter().rect_filled(
+                    r.translate(vec2(0.0, 1.5)).expand(1.0),
+                    12.0,
+                    Color32::from_black_alpha(22),
+                );
+                ui.painter().rect_filled(r, 11.0, Color32::WHITE);
+            }
+            clicked = panel_button(ui, side, open, tip);
+        });
     clicked
 }
 
@@ -78,7 +119,11 @@ pub fn collapsed_strip(ui: &mut egui::Ui, side: Side, label: &str, tip: &str) ->
             open = true;
         }
         let l = egui::Label::new(RichText::new(label).size(12.0).color(GREY)).sense(Sense::click());
-        if ui.add(l).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+        if ui
+            .add(l)
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .clicked()
+        {
             open = true;
         }
     });
@@ -98,9 +143,15 @@ impl App {
         ui.menu_button("View", |ui| {
             ui.checkbox(&mut self.show_browser, "Instruments        Ctrl+B");
             ui.checkbox(&mut self.show_detail, "Piano roll & Mixer        Ctrl+J");
-            ui.checkbox(&mut self.show_keys, "On-screen keyboard        Ctrl+Shift+K");
+            ui.checkbox(
+                &mut self.show_keys,
+                "On-screen keyboard        Ctrl+Shift+K",
+            );
             ui.separator();
-            if ui.button("Focus on the timeline        Ctrl+Shift+F").clicked() {
+            if ui
+                .button("Focus on the timeline        Ctrl+Shift+F")
+                .clicked()
+            {
                 self.show_browser = false;
                 self.show_detail = false;
                 self.show_keys = false;

@@ -4,7 +4,9 @@
 
 use crate::meters;
 use crate::theme::*;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, RichText, Rounding, Sense, Vec2};
+use eframe::egui::{
+    self, Align2, Color32, FontId, Rect, RichText, Rounding, Sense, Vec2, pos2, vec2,
+};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::*};
 use std::sync::{Arc, OnceLock};
@@ -76,7 +78,10 @@ impl Tap {
 
     /// Peaks (linear, L / R) since the previous call.
     pub fn take_peaks(&self) -> (f32, f32) {
-        (f32::from_bits(self.peak_l.swap(0, Relaxed)), f32::from_bits(self.peak_r.swap(0, Relaxed)))
+        (
+            f32::from_bits(self.peak_l.swap(0, Relaxed)),
+            f32::from_bits(self.peak_r.swap(0, Relaxed)),
+        )
     }
 }
 
@@ -122,18 +127,22 @@ fn fft(re: &mut [f32], im: &mut [f32]) {
     }
 }
 
-const N: usize = 4096;
+pub(crate) const N: usize = 4096;
 const FMIN: f32 = 20.0;
 const DB_TOP: f32 = 0.0;
 const DB_BOT: f32 = -80.0;
 
 fn hann() -> &'static [f32] {
     static W: OnceLock<Vec<f32>> = OnceLock::new();
-    W.get_or_init(|| (0..N).map(|i| 0.5 - 0.5 * (2.0 * PI * i as f32 / N as f32).cos()).collect())
+    W.get_or_init(|| {
+        (0..N)
+            .map(|i| 0.5 - 0.5 * (2.0 * PI * i as f32 / N as f32).cos())
+            .collect()
+    })
 }
 
 /// Magnitude of every bin in dBFS (a full-scale sine reads 0 dB).
-fn analyse(tap: &Tap) -> Vec<f32> {
+pub(crate) fn analyse(tap: &Tap) -> Vec<f32> {
     let mut re = vec![0.0f32; N];
     tap.snapshot(&mut re);
     for (x, w) in re.iter_mut().zip(hann()) {
@@ -142,7 +151,9 @@ fn analyse(tap: &Tap) -> Vec<f32> {
     let mut im = vec![0.0f32; N];
     fft(&mut re, &mut im);
     let k = 4.0 / N as f32; // sum(Hann) = N/2, and a sine splits into two bins
-    (0..N / 2).map(|b| 20.0 * ((re[b] * re[b] + im[b] * im[b]).sqrt() * k + 1e-9).log10()).collect()
+    (0..N / 2)
+        .map(|b| 20.0 * ((re[b] * re[b] + im[b] * im[b]).sqrt() * k + 1e-9).log10())
+        .collect()
 }
 
 // ======================================================================
@@ -159,15 +170,26 @@ struct Spec {
 
 impl Default for Spec {
     fn default() -> Self {
-        Self { smooth: Vec::new(), hold: Vec::new(), tilt: false, peak: true }
+        Self {
+            smooth: Vec::new(),
+            hold: Vec::new(),
+            tilt: false,
+            peak: true,
+        }
     }
 }
 
-const NOTES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const NOTES: [&str; 12] = [
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
 
 fn note_name(f: f32) -> String {
     let m = (69.0 + 12.0 * (f / 440.0).log2()).round() as i32;
-    format!("{}{}", NOTES[m.rem_euclid(12) as usize], m.div_euclid(12) - 1)
+    format!(
+        "{}{}",
+        NOTES[m.rem_euclid(12) as usize],
+        m.div_euclid(12) - 1
+    )
 }
 
 fn hz_text(f: f32) -> String {
@@ -183,7 +205,10 @@ fn draw_spectrum(ui: &mut egui::Ui, tap: &Tap, size: Vec2, st: &mut Spec) {
     let sr = tap.sr().max(8000.0);
     let fmax = 20000f32.min(sr * 0.5 * 0.98);
     let ratio = fmax / FMIN;
-    let inner = Rect::from_min_max(pos2(rect.left() + 26.0, rect.top() + 6.0), pos2(rect.right() - 6.0, rect.bottom() - 16.0));
+    let inner = Rect::from_min_max(
+        pos2(rect.left() + 26.0, rect.top() + 6.0),
+        pos2(rect.right() - 6.0, rect.bottom() - 16.0),
+    );
     if inner.width() < 40.0 || inner.height() < 30.0 {
         return;
     }
@@ -191,24 +216,53 @@ fn draw_spectrum(ui: &mut egui::Ui, tap: &Tap, size: Vec2, st: &mut Spec) {
     p.rect_filled(rect, 10.0, Color32::from_rgb(248, 248, 251));
 
     let fx = |f: f32| inner.left() + (f / FMIN).ln() / ratio.ln() * inner.width();
-    let dy = |d: f32| inner.top() + (DB_TOP - d.clamp(DB_BOT, DB_TOP)) / (DB_TOP - DB_BOT) * inner.height();
+    let dy = |d: f32| {
+        inner.top() + (DB_TOP - d.clamp(DB_BOT, DB_TOP)) / (DB_TOP - DB_BOT) * inner.height()
+    };
 
     // grid: one line every 20 dB, three frequency labels, the rest are faint guides
     let line = Color32::from_rgb(238, 238, 243);
     for i in 0..4 {
         let d = -20.0 * i as f32;
         let y = dy(d);
-        p.line_segment([pos2(inner.left(), y), pos2(inner.right(), y)], stroke(1.0, line));
-        p.text(pos2(inner.left() - 5.0, y), Align2::RIGHT_CENTER, format!("{}", d as i32), FontId::proportional(9.0), GREY);
+        p.line_segment(
+            [pos2(inner.left(), y), pos2(inner.right(), y)],
+            stroke(1.0, line),
+        );
+        p.text(
+            pos2(inner.left() - 5.0, y),
+            Align2::RIGHT_CENTER,
+            format!("{}", d as i32),
+            FontId::proportional(9.0),
+            GREY,
+        );
     }
-    for (f, label) in [(50.0, ""), (100.0, "100"), (200.0, ""), (500.0, ""), (1000.0, "1k"), (2000.0, ""), (5000.0, ""), (10000.0, "10k")] {
+    for (f, label) in [
+        (50.0, ""),
+        (100.0, "100"),
+        (200.0, ""),
+        (500.0, ""),
+        (1000.0, "1k"),
+        (2000.0, ""),
+        (5000.0, ""),
+        (10000.0, "10k"),
+    ] {
         if f >= fmax {
             continue;
         }
         let x = fx(f);
-        p.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(1.0, line));
+        p.line_segment(
+            [pos2(x, inner.top()), pos2(x, inner.bottom())],
+            stroke(1.0, line),
+        );
         if !label.is_empty() {
-            p.text(pos2(x, inner.bottom() + 3.0), Align2::CENTER_TOP, label, FontId::proportional(9.0), GREY);
+            p.text(
+                pos2(x, inner.bottom() + 3.0),
+                Align2::CENTER_TOP,
+                label,
+                FontId::proportional(9.0),
+                GREY,
+            );
         }
     }
 
@@ -246,7 +300,11 @@ fn draw_spectrum(ui: &mut egui::Ui, tap: &Tap, size: Vec2, st: &mut Spec) {
         let s = &mut st.smooth[i];
         *s += (v - *s) * if v > *s { a_up } else { a_down };
         let h = &mut st.hold[i];
-        *h = if *s > *h { *s } else { (*h - 12.0 * dt).max(DB_BOT) };
+        *h = if *s > *h {
+            *s
+        } else {
+            (*h - 12.0 * dt).max(DB_BOT)
+        };
         loudest = loudest.max(*s);
         let x = inner.left() + (i as f32 + 0.5) / cols as f32 * inner.width();
         curve.push(pos2(x, dy(*s)));
@@ -276,10 +334,16 @@ fn draw_spectrum(ui: &mut egui::Ui, tap: &Tap, size: Vec2, st: &mut Spec) {
         let t = (h.x - inner.left()) / inner.width();
         let f = FMIN * ratio.powf(t);
         let i = ((t * cols as f32) as usize).min(cols - 1);
-        pp.line_segment([pos2(h.x, inner.top()), pos2(h.x, inner.bottom())], stroke(1.0, tint(INK, 45)));
+        pp.line_segment(
+            [pos2(h.x, inner.top()), pos2(h.x, inner.bottom())],
+            stroke(1.0, tint(INK, 45)),
+        );
         let txt = format!("{}  {}  {:.1} dB", hz_text(f), note_name(f), st.smooth[i]);
         let g = p.layout_no_wrap(txt, FontId::monospace(10.0), INK);
-        let r = Rect::from_min_size(pos2(inner.right() - g.size().x - 14.0, inner.top() + 4.0), g.size() + vec2(8.0, 4.0));
+        let r = Rect::from_min_size(
+            pos2(inner.right() - g.size().x - 14.0, inner.top() + 4.0),
+            g.size() + vec2(8.0, 4.0),
+        );
         p.rect_filled(r, 6.0, tint(Color32::WHITE, 235));
         p.galley(r.min + vec2(4.0, 2.0), g, INK);
         ui.ctx().request_repaint();
@@ -298,12 +362,27 @@ fn chip(ui: &mut egui::Ui, label: &str, on: bool, tip: &str) -> bool {
     let (fill, fg) = if on {
         (tint(ACCENT, if hover { 52 } else { 34 }), ACCENT)
     } else {
-        (if hover { Color32::from_rgb(228, 228, 235) } else { Color32::from_rgb(240, 240, 245) }, GREY)
+        (
+            if hover {
+                Color32::from_rgb(228, 228, 235)
+            } else {
+                Color32::from_rgb(240, 240, 245)
+            },
+            GREY,
+        )
     };
     let p = ui.painter();
     p.rect_filled(rect, 11.0, fill);
-    p.text(rect.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.5), fg);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip).clicked()
+    p.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(11.5),
+        fg,
+    );
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(tip)
+        .clicked()
 }
 
 /// Peak read-out in the card header; a click resets every peak and the clip LEDs.
@@ -312,10 +391,21 @@ fn peak_readout(ui: &mut egui::Ui, pk: f32) {
     let hover = resp.hovered();
     let col = if pk >= 0.0 { RED } else { GREY };
     if hover {
-        ui.painter().rect_filled(rect, 11.0, Color32::from_rgb(240, 240, 245));
+        ui.painter()
+            .rect_filled(rect, 11.0, Color32::from_rgb(240, 240, 245));
     }
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, format!("{:+.1} dB", pk), FontId::proportional(11.5), col);
-    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Highest peak. Click to reset").clicked() {
+    ui.painter().text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        format!("{:+.1} dB", pk),
+        FontId::proportional(11.5),
+        col,
+    );
+    if resp
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text("Highest peak. Click to reset")
+        .clicked()
+    {
         meters::reset_all(ui.ctx());
     }
 }
@@ -339,13 +429,19 @@ pub fn master_panel(ui: &mut egui::Ui, tap: &Tap, w: f32, h: f32) {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     ui.label(RichText::new("Master").strong().size(13.0));
-                    let pk = meters::peak_db(ui.ctx(), meters::MASTER_L).max(meters::peak_db(ui.ctx(), meters::MASTER_R));
+                    let pk = meters::peak_db(ui.ctx(), meters::MASTER_L)
+                        .max(meters::peak_db(ui.ctx(), meters::MASTER_R));
                     if pk > -90.0 {
                         peak_readout(ui, pk);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        if chip(ui, "Tilt", st.tilt, "+4.5 dB per octave: the spectrum looks like what you hear") {
+                        if chip(
+                            ui,
+                            "Tilt",
+                            st.tilt,
+                            "+4.5 dB per octave: the spectrum looks like what you hear",
+                        ) {
                             st.tilt = !st.tilt;
                         }
                         if chip(ui, "Hold", st.peak, "Peak hold curve") {

@@ -1,10 +1,12 @@
 //! On-screen piano keyboard (always visible, like a hardware controller).
 
-use crate::theme::*;
 use crate::App;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, RichText, Rounding, Sense};
+use crate::theme::*;
+use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Rounding, Sense, pos2, vec2};
 
-const LETTERS: [&str; 15] = ["A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L"];
+const LETTERS: [&str; 15] = [
+    "A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L",
+];
 
 impl App {
     pub fn ui_keyboard(&mut self, ui: &mut egui::Ui) {
@@ -36,17 +38,31 @@ impl App {
         let mut wk: Vec<(Rect, i32)> = Vec::new();
         let mut bk: Vec<(Rect, i32)> = Vec::new();
         for (i, &m) in whites.iter().enumerate() {
-            wk.push((Rect::from_min_size(pos2(rect.left() + i as f32 * ww, rect.top()), vec2(ww, rect.height())), m));
+            wk.push((
+                Rect::from_min_size(
+                    pos2(rect.left() + i as f32 * ww, rect.top()),
+                    vec2(ww, rect.height()),
+                ),
+                m,
+            ));
         }
         for m in lo..=lo + 48 {
             if !is_white(m) {
                 let i = whites.iter().position(|&w| w == m - 1).unwrap_or(0);
                 let x = rect.left() + (i as f32 + 1.0) * ww - bw / 2.0;
-                bk.push((Rect::from_min_size(pos2(x, rect.top()), vec2(bw, rect.height() * 0.62)), m));
+                bk.push((
+                    Rect::from_min_size(pos2(x, rect.top()), vec2(bw, rect.height() * 0.62)),
+                    m,
+                ));
             }
         }
         let hit = if resp.is_pointer_button_down_on() {
-            resp.interact_pointer_pos().and_then(|p| bk.iter().chain(wk.iter()).find(|(r, _)| r.contains(p)).map(|(_, m)| *m))
+            resp.interact_pointer_pos().and_then(|p| {
+                bk.iter()
+                    .chain(wk.iter())
+                    .find(|(r, _)| r.contains(p))
+                    .map(|(_, m)| *m)
+            })
         } else {
             None
         };
@@ -62,27 +78,69 @@ impl App {
         }
 
         let base = 12 * (self.octave + 1);
-        let letter = |m: i32| if m >= base && m - base < 15 { Some(LETTERS[(m - base) as usize]) } else { None };
+        let letter = |m: i32| {
+            if m >= base && m - base < 15 {
+                Some(LETTERS[(m - base) as usize])
+            } else {
+                None
+            }
+        };
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 12.0, Color32::WHITE);
         for (r, m) in &wk {
             let on = self.down.contains(&(*m as u8));
             let rr = r.shrink2(vec2(0.5, 0.0));
-            let round = Rounding { nw: 0.0, ne: 0.0, sw: 9.0, se: 9.0 };
-            p.rect_filled(rr, round, if on { tint(ACCENT, 70) } else { Color32::WHITE });
+            let round = Rounding {
+                nw: 0.0,
+                ne: 0.0,
+                sw: 9.0,
+                se: 9.0,
+            };
+            p.rect_filled(
+                rr,
+                round,
+                if on { tint(ACCENT, 70) } else { Color32::WHITE },
+            );
             p.rect_stroke(rr, round, stroke(1.0, HAIR));
             if let Some(l) = letter(*m) {
-                p.text(pos2(r.center().x, r.bottom() - 30.0), Align2::CENTER_CENTER, l, FontId::proportional(12.0), tint(ACCENT, 200));
+                p.text(
+                    pos2(r.center().x, r.bottom() - 30.0),
+                    Align2::CENTER_CENTER,
+                    l,
+                    FontId::proportional(12.0),
+                    tint(ACCENT, 200),
+                );
             }
             if m % 12 == 0 {
-                p.text(pos2(r.center().x, r.bottom() - 12.0), Align2::CENTER_CENTER, format!("C{}", m / 12 - 1), FontId::proportional(10.5), GREY);
+                p.text(
+                    pos2(r.center().x, r.bottom() - 12.0),
+                    Align2::CENTER_CENTER,
+                    format!("C{}", m / 12 - 1),
+                    FontId::proportional(10.5),
+                    GREY,
+                );
             }
         }
         for (r, m) in &bk {
             let on = self.down.contains(&(*m as u8));
-            p.rect_filled(*r, Rounding { nw: 0.0, ne: 0.0, sw: 5.0, se: 5.0 }, if on { ACCENT } else { INK });
+            p.rect_filled(
+                *r,
+                Rounding {
+                    nw: 0.0,
+                    ne: 0.0,
+                    sw: 5.0,
+                    se: 5.0,
+                },
+                if on { ACCENT } else { INK },
+            );
             if let Some(l) = letter(*m) {
-                p.text(pos2(r.center().x, r.bottom() - 12.0), Align2::CENTER_CENTER, l, FontId::proportional(10.5), Color32::from_rgb(200, 200, 206));
+                p.text(
+                    pos2(r.center().x, r.bottom() - 12.0),
+                    Align2::CENTER_CENTER,
+                    l,
+                    FontId::proportional(10.5),
+                    Color32::from_rgb(200, 200, 206),
+                );
             }
         }
         if inst.is_none() {

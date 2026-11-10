@@ -202,19 +202,35 @@ impl Instrument {
 
     pub fn category(self) -> Category {
         match self {
-            Instrument::Piano | Instrument::ElectricPiano | Instrument::Clavinet | Instrument::Harpsichord => Category::Keys,
+            Instrument::Piano
+            | Instrument::ElectricPiano
+            | Instrument::Clavinet
+            | Instrument::Harpsichord => Category::Keys,
             Instrument::Organ | Instrument::ChurchOrgan => Category::Organs,
-            Instrument::SynthLead | Instrument::SquareLead | Instrument::SuperSaw => Category::Leads,
-            Instrument::SynthBass | Instrument::SubBass | Instrument::AcidBass | Instrument::Bass808 | Instrument::ElectricBass => {
-                Category::Basses
+            Instrument::SynthLead | Instrument::SquareLead | Instrument::SuperSaw => {
+                Category::Leads
             }
-            Instrument::Pluck | Instrument::Guitar | Instrument::Harp | Instrument::ElectricGuitar | Instrument::SynthPluck => {
-                Category::Plucked
-            }
+            Instrument::SynthBass
+            | Instrument::SubBass
+            | Instrument::AcidBass
+            | Instrument::Bass808
+            | Instrument::ElectricBass => Category::Basses,
+            Instrument::Pluck
+            | Instrument::Guitar
+            | Instrument::Harp
+            | Instrument::ElectricGuitar
+            | Instrument::SynthPluck => Category::Plucked,
             Instrument::Strings | Instrument::WarmPad | Instrument::Choir => Category::Pads,
-            Instrument::Bell | Instrument::Marimba | Instrument::MusicBox | Instrument::Vibraphone => Category::Mallets,
+            Instrument::Bell
+            | Instrument::Marimba
+            | Instrument::MusicBox
+            | Instrument::Vibraphone => Category::Mallets,
             Instrument::Brass | Instrument::Flute => Category::Brass,
-            Instrument::DrumKit | Instrument::Kit808 | Instrument::TrapKit | Instrument::ReggaetonKit | Instrument::LatinPerc => Category::Drums,
+            Instrument::DrumKit
+            | Instrument::Kit808
+            | Instrument::TrapKit
+            | Instrument::ReggaetonKit
+            | Instrument::LatinPerc => Category::Drums,
         }
     }
 
@@ -245,7 +261,11 @@ impl Instrument {
             Instrument::Brass => 12.0,
             Instrument::Flute => 10.0,
             // Drums are one-shots: they end by themselves, note-off must not cut them.
-            Instrument::DrumKit | Instrument::Kit808 | Instrument::TrapKit | Instrument::ReggaetonKit | Instrument::LatinPerc => 0.0,
+            Instrument::DrumKit
+            | Instrument::Kit808
+            | Instrument::TrapKit
+            | Instrument::ReggaetonKit
+            | Instrument::LatinPerc => 0.0,
             Instrument::Bass808 => 18.0,
             Instrument::ElectricBass => 22.0,
             Instrument::ElectricGuitar => 14.0,
@@ -296,7 +316,14 @@ pub struct Voice {
 }
 
 impl Voice {
-    pub fn new(track: usize, inst: Instrument, key: u8, vel: f32, delay: usize, hold: usize) -> Self {
+    pub fn new(
+        track: usize,
+        inst: Instrument,
+        key: u8,
+        vel: f32,
+        delay: usize,
+        hold: usize,
+    ) -> Self {
         Self {
             track,
             key,
@@ -363,10 +390,21 @@ impl Voice {
                 let a = TAU * f * t;
                 let idx = 1.6 * (-3.0 * t).exp();
                 let tine = 0.12 * (a * 7.0).sin() * (-10.0 * t).exp();
-                (((a + idx * a.sin()).sin() + tine) * (-1.4 * t).exp(), 0.003, 0.35)
+                (
+                    ((a + idx * a.sin()).sin() + tine) * (-1.4 * t).exp(),
+                    0.003,
+                    0.35,
+                )
             }
             Instrument::Organ => {
-                let bars = [(1.0, 1.0), (2.0, 0.8), (3.0, 0.5), (4.0, 0.4), (6.0, 0.25), (8.0, 0.2)];
+                let bars = [
+                    (1.0, 1.0),
+                    (2.0, 0.8),
+                    (3.0, 0.5),
+                    (4.0, 0.4),
+                    (6.0, 0.25),
+                    (8.0, 0.2),
+                ];
                 let s: f32 = bars.iter().map(|(h, a)| a * (TAU * f * h * t).sin()).sum();
                 (s / 3.2, 0.008, 0.28)
             }
@@ -406,7 +444,12 @@ impl Voice {
                 (self.lp, 0.35, 0.25)
             }
             Instrument::Bell => {
-                let parts = [(1.0, 1.0, 0.5), (2.76, 0.6, 0.9), (5.4, 0.4, 1.4), (8.93, 0.3, 2.0)];
+                let parts = [
+                    (1.0, 1.0, 0.5),
+                    (2.76, 0.6, 0.9),
+                    (5.4, 0.4, 1.4),
+                    (8.93, 0.3, 2.0),
+                ];
                 let mut s = 0.0;
                 for (r, a, d) in parts {
                     if f * r < 16000.0 {
@@ -444,7 +487,15 @@ impl Voice {
 
             // ------------------------------------------------ Organs
             Instrument::ChurchOrgan => {
-                let bars = [(0.5, 0.6), (1.0, 1.0), (2.0, 0.7), (3.0, 0.4), (4.0, 0.5), (5.0, 0.2), (8.0, 0.2)];
+                let bars = [
+                    (0.5, 0.6),
+                    (1.0, 1.0),
+                    (2.0, 0.7),
+                    (3.0, 0.4),
+                    (4.0, 0.5),
+                    (5.0, 0.2),
+                    (8.0, 0.2),
+                ];
                 let trem = 1.0 + 0.03 * (TAU * 5.0 * t).sin();
                 let s: f32 = bars.iter().map(|(h, a)| a * (TAU * f * h * t).sin()).sum();
                 (s / 3.6 * trem, 0.03, 0.26)
@@ -583,35 +634,59 @@ impl Voice {
             Instrument::Flute => {
                 let a = TAU * f * t;
                 let vib = 0.25 * (1.0 - (-2.0 * t).exp()) * (TAU * 5.0 * t).sin();
-                let tone = (a + vib).sin() + 0.15 * (2.0 * (a + vib)).sin() + 0.05 * (3.0 * (a + vib)).sin();
+                let tone = (a + vib).sin()
+                    + 0.15 * (2.0 * (a + vib)).sin()
+                    + 0.05 * (3.0 * (a + vib)).sin();
                 let noise = ((t * 12345.678).sin() * 43758.5453).fract() - 0.5;
                 (tone + 0.06 * noise, 0.08, 0.3)
             }
 
             // ------------------------------------------------ Drums (0.6, see drums.rs)
             Instrument::DrumKit | Instrument::Kit808 => {
-                match crate::drums::hit(self.inst == Instrument::Kit808, self.key, t, dt, &mut self.rng, &mut self.st) {
+                match crate::drums::hit(
+                    self.inst == Instrument::Kit808,
+                    self.key,
+                    t,
+                    dt,
+                    &mut self.rng,
+                    &mut self.st,
+                ) {
                     Some(x) => (x, 0.0005, 0.6),
                     None => return None, // a drum hit ends by itself: no 12 s voice
                 }
             }
 
             Instrument::TrapKit | Instrument::ReggaetonKit => {
-                let style = if self.inst == Instrument::TrapKit { crate::drums_urban::Style::Trap } else { crate::drums_urban::Style::Reggaeton };
+                let style = if self.inst == Instrument::TrapKit {
+                    crate::drums_urban::Style::Trap
+                } else {
+                    crate::drums_urban::Style::Reggaeton
+                };
                 match crate::drums_urban::hit(style, self.key, t, dt, &mut self.rng, &mut self.st) {
                     Some(x) => (x, 0.0005, 0.6),
                     None => return None,
                 }
             }
-            Instrument::LatinPerc => match crate::latin::hit(self.key, t, dt, &mut self.rng, &mut self.st) {
-                Some(x) => (x, 0.0005, 0.6),
-                None => return None,
-            },
+            Instrument::LatinPerc => {
+                match crate::latin::hit(self.key, t, dt, &mut self.rng, &mut self.st) {
+                    Some(x) => (x, 0.0005, 0.6),
+                    None => return None,
+                }
+            }
 
             // ------------------------------------------------ Extra voices (0.6, see extra_voices.rs)
-            Instrument::Bass808 | Instrument::ElectricBass | Instrument::ElectricGuitar | Instrument::SynthPluck => {
-                crate::extra_voices::voice(self.inst, f, t, dt, &mut self.ph, &mut self.lp, &mut self.lp2)
-            }
+            Instrument::Bass808
+            | Instrument::ElectricBass
+            | Instrument::ElectricGuitar
+            | Instrument::SynthPluck => crate::extra_voices::voice(
+                self.inst,
+                f,
+                t,
+                dt,
+                &mut self.ph,
+                &mut self.lp,
+                &mut self.lp2,
+            ),
         };
         let mut g = (t / attack).min(1.0) * self.vel * level;
         if let Some(tr) = self.rel {

@@ -7,10 +7,10 @@
 use crate::theme::{ACCENT, GREY};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
-use eframe::egui::{self, pos2, vec2, Color32, RichText, Rounding, Sense, Shape, Stroke};
+use eframe::egui::{self, Color32, RichText, Rounding, Sense, Shape, Stroke, pos2, vec2};
 use std::f32::consts::{PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 
 /// State shared between the UI thread and the audio callback.
 struct Shared {
@@ -40,7 +40,11 @@ pub struct Metronome {
     bad_frames: u32,
 }
 
-fn build_stream<T>(device: &cpal::Device, config: &cpal::StreamConfig, shared: Arc<Shared>) -> Result<cpal::Stream, String>
+fn build_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    shared: Arc<Shared>,
+) -> Result<cpal::Stream, String>
 where
     T: SizedSample + FromSample<f32>,
 {
@@ -59,9 +63,9 @@ where
             config,
             move |data: &mut [T], _| {
                 // the UI asked us to jump to a new position
-                let gen = shared.generation.load(Relaxed);
-                if gen != last_gen {
-                    last_gen = gen;
+                let generation = shared.generation.load(Relaxed);
+                if generation != last_gen {
+                    last_gen = generation;
                     beat = f64::from_bits(shared.target.load(Relaxed));
                     last_idx = (beat - 1e-9).floor() as i64;
                 }
@@ -113,7 +117,9 @@ where
 
 fn open(shared: Arc<Shared>) -> Result<cpal::Stream, String> {
     let host = cpal::default_host();
-    let device = host.default_output_device().ok_or_else(|| "No audio output device".to_string())?;
+    let device = host
+        .default_output_device()
+        .ok_or_else(|| "No audio output device".to_string())?;
     let supported = device.default_output_config().map_err(|e| e.to_string())?;
     let fmt = supported.sample_format();
     let config = supported.config();
@@ -235,7 +241,11 @@ impl Metronome {
         ];
         p.add(Shape::closed_line(body, Stroke::new(1.6_f32, fg)));
         let live = on && playing;
-        let ang = if live { (pos_beats.rem_euclid(2.0) as f32 * PI).sin() * 0.55 } else { 0.0 };
+        let ang = if live {
+            (pos_beats.rem_euclid(2.0) as f32 * PI).sin() * 0.55
+        } else {
+            0.0
+        };
         let pivot = pos2(c.x, c.y + 6.0);
         let dir = vec2(ang.sin(), -ang.cos());
         p.line_segment([pivot, pivot + dir * 15.0], Stroke::new(1.6_f32, fg));
@@ -244,8 +254,13 @@ impl Metronome {
         // beat flash (yellow on the first beat of the bar)
         if live {
             let flash = (1.0 - pos_beats.rem_euclid(1.0) as f32 * 5.0).clamp(0.0, 1.0);
-            let first = self.accent && (pos_beats.floor() as i64).rem_euclid(self.per_bar.max(1) as i64) == 0;
-            let col = if first { (255, 214, 10) } else { (255, 255, 255) };
+            let first = self.accent
+                && (pos_beats.floor() as i64).rem_euclid(self.per_bar.max(1) as i64) == 0;
+            let col = if first {
+                (255, 214, 10)
+            } else {
+                (255, 255, 255)
+            };
             p.circle_filled(
                 pos2(rect.right() - 7.0, rect.top() + 7.0),
                 3.0,
@@ -267,13 +282,19 @@ impl Metronome {
             ui.horizontal(|ui| {
                 ui.label("Beats per bar");
                 for n in [2u32, 3, 4, 5, 6, 7] {
-                    if ui.selectable_label(self.per_bar == n, n.to_string()).clicked() {
+                    if ui
+                        .selectable_label(self.per_bar == n, n.to_string())
+                        .clicked()
+                    {
                         self.per_bar = n;
                     }
                 }
             });
             ui.checkbox(&mut self.accent, "Accent the first beat");
-            if ui.add(egui::Slider::new(&mut self.offset_ms, -80.0..=80.0).text("Latency (ms)")).changed() {
+            if ui
+                .add(egui::Slider::new(&mut self.offset_ms, -80.0..=80.0).text("Latency (ms)"))
+                .changed()
+            {
                 self.need_sync = true;
             }
         });

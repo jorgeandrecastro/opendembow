@@ -1,6 +1,6 @@
 //! Visual identity: light, airy, rounded, a single blue accent.
 
-use eframe::egui::{self, vec2, Color32, FontId, Rounding, Stroke};
+use eframe::egui::{self, Color32, FontId, Rounding, Stroke, vec2};
 
 pub const ACCENT: Color32 = Color32::from_rgb(0, 122, 255);
 pub const RED: Color32 = Color32::from_rgb(255, 59, 48);
@@ -52,7 +52,9 @@ pub fn apply(ctx: &egui::Context) {
     ctx.style_mut(|s| {
         s.spacing.item_spacing = vec2(8.0, 8.0);
         s.spacing.button_padding = vec2(13.0, 6.0);
-        s.text_styles.insert(egui::TextStyle::Body, FontId::proportional(14.5));
-        s.text_styles.insert(egui::TextStyle::Button, FontId::proportional(14.0));
+        s.text_styles
+            .insert(egui::TextStyle::Body, FontId::proportional(14.5));
+        s.text_styles
+            .insert(egui::TextStyle::Button, FontId::proportional(14.0));
     });
 }

@@ -5,7 +5,10 @@ use crate::instruments::{Category, Instrument};
 use crate::project::TrackKind;
 use crate::theme::*;
 use crate::{App, DetailTab};
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, Rounding, Sense, Shape};
+use eframe::egui::{
+    self, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, Rounding, Sense, Shape, pos2,
+    vec2,
+};
 use std::f32::consts::TAU;
 
 /// State of the instrument browser (kept in egui's memory, no change needed in `App`).
@@ -51,7 +54,11 @@ fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
         Category::Keys => {
             for k in 0..3 {
                 let x = c.x - w / 2.0 + k as f32 * (w / 3.0);
-                p.rect_filled(Rect::from_min_size(pos2(x + 0.8, c.y - h / 2.0), vec2(w / 3.0 - 1.6, h)), 1.5, col);
+                p.rect_filled(
+                    Rect::from_min_size(pos2(x + 0.8, c.y - h / 2.0), vec2(w / 3.0 - 1.6, h)),
+                    1.5,
+                    col,
+                );
             }
         }
         Category::Organs => {
@@ -59,7 +66,11 @@ fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
             for (k, hh) in hs.iter().enumerate() {
                 let x = c.x - w / 2.0 + k as f32 * (w / 4.0);
                 let ph = h * hh;
-                p.rect_filled(Rect::from_min_size(pos2(x + 0.8, c.y + h / 2.0 - ph), vec2(w / 4.0 - 1.6, ph)), 1.5, col);
+                p.rect_filled(
+                    Rect::from_min_size(pos2(x + 0.8, c.y + h / 2.0 - ph), vec2(w / 4.0 - 1.6, ph)),
+                    1.5,
+                    col,
+                );
             }
         }
         Category::Leads => {
@@ -73,7 +84,10 @@ fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
         }
         Category::Pads => {
             p.add(Shape::line(wave(|x| (x * TAU * 1.5).sin()), st));
-            p.add(Shape::line(wave(|x| (x * TAU * 1.5 + 1.2).sin()), stroke(1.8, col.gamma_multiply(0.45))));
+            p.add(Shape::line(
+                wave(|x| (x * TAU * 1.5 + 1.2).sin()),
+                stroke(1.8, col.gamma_multiply(0.45)),
+            ));
         }
         Category::Mallets => {
             p.circle_stroke(c, h * 0.5, st);
@@ -94,8 +108,20 @@ fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
             // a drum body with two crossed sticks above it
             let body = Rect::from_center_size(pos2(c.x, c.y + h * 0.18), vec2(w, h * 0.62));
             p.rect_stroke(body, 4.0, st);
-            p.line_segment([pos2(c.x - w * 0.35, c.y - h * 0.55), pos2(c.x + w * 0.05, c.y - h * 0.02)], st);
-            p.line_segment([pos2(c.x + w * 0.35, c.y - h * 0.55), pos2(c.x - w * 0.05, c.y - h * 0.02)], st);
+            p.line_segment(
+                [
+                    pos2(c.x - w * 0.35, c.y - h * 0.55),
+                    pos2(c.x + w * 0.05, c.y - h * 0.02),
+                ],
+                st,
+            );
+            p.line_segment(
+                [
+                    pos2(c.x + w * 0.35, c.y - h * 0.55),
+                    pos2(c.x - w * 0.05, c.y - h * 0.02),
+                ],
+                st,
+            );
         }
     }
 }
@@ -124,7 +150,11 @@ fn draw_star(p: &Painter, c: Pos2, r: f32, fill: Option<Color32>, col: Color32) 
             p.add(Shape::convex_polygon(inner, f, egui::Stroke::NONE));
             for k in 0..5 {
                 let i = 2 * k;
-                p.add(Shape::convex_polygon(vec![pts[i], pts[(i + 9) % 10], pts[i + 1]], f, egui::Stroke::NONE));
+                p.add(Shape::convex_polygon(
+                    vec![pts[i], pts[(i + 9) % 10], pts[i + 1]],
+                    f,
+                    egui::Stroke::NONE,
+                ));
             }
         }
         None => {
@@ -136,15 +166,34 @@ fn draw_star(p: &Painter, c: Pos2, r: f32, fill: Option<Color32>, col: Color32) 
 /// Floating card that follows the cursor while an instrument is dragged.
 pub fn draw_ghost(ctx: &egui::Context, inst: Instrument) {
     if let Some(p) = ctx.pointer_latest_pos() {
-        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("ghost")));
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new("ghost"),
+        ));
         let r = Rect::from_min_size(p + vec2(16.0, 12.0), vec2(200.0, 48.0));
-        painter.rect_filled(r.translate(vec2(0.0, 4.0)).expand(2.0), 16.0, Color32::from_black_alpha(30));
+        painter.rect_filled(
+            r.translate(vec2(0.0, 4.0)).expand(2.0),
+            16.0,
+            Color32::from_black_alpha(30),
+        );
         painter.rect_filled(r, 14.0, Color32::WHITE);
         painter.rect_stroke(r, 14.0, stroke(1.5, ACCENT));
         let tile = Rect::from_min_size(pos2(r.left() + 7.0, r.center().y - 17.0), vec2(34.0, 34.0));
         draw_tile(&painter, tile, inst);
-        painter.text(pos2(tile.right() + 10.0, r.center().y - 7.0), Align2::LEFT_CENTER, inst.name(), FontId::proportional(13.5), INK);
-        painter.text(pos2(tile.right() + 10.0, r.center().y + 9.0), Align2::LEFT_CENTER, inst.category().name(), FontId::proportional(11.0), GREY);
+        painter.text(
+            pos2(tile.right() + 10.0, r.center().y - 7.0),
+            Align2::LEFT_CENTER,
+            inst.name(),
+            FontId::proportional(13.5),
+            INK,
+        );
+        painter.text(
+            pos2(tile.right() + 10.0, r.center().y + 9.0),
+            Align2::LEFT_CENTER,
+            inst.category().name(),
+            FontId::proportional(11.0),
+            GREY,
+        );
     }
 }
 
@@ -184,7 +233,11 @@ pub fn app_icon() -> egui::IconData {
             rgba[i + 3] = 255;
         }
     }
-    egui::IconData { rgba, width: n as u32, height: n as u32 }
+    egui::IconData {
+        rgba,
+        width: n as u32,
+        height: n as u32,
+    }
 }
 
 impl App {
@@ -195,11 +248,17 @@ impl App {
                     self.new_project(ui.ctx());
                     ui.close_menu();
                 }
-                if ui.add(egui::Button::new("Open Project…").shortcut_text("Ctrl+O")).clicked() {
+                if ui
+                    .add(egui::Button::new("Open Project…").shortcut_text("Ctrl+O"))
+                    .clicked()
+                {
                     self.open_project_dialog(ui.ctx());
                     ui.close_menu();
                 }
-                if ui.add(egui::Button::new("Save Project").shortcut_text("Ctrl+S")).clicked() {
+                if ui
+                    .add(egui::Button::new("Save Project").shortcut_text("Ctrl+S"))
+                    .clicked()
+                {
                     self.save_project(ui.ctx(), false);
                     ui.close_menu();
                 }
@@ -208,12 +267,18 @@ impl App {
                     ui.close_menu();
                 }
                 ui.separator();
-                if ui.add(egui::Button::new("Import Audio…").shortcut_text("Ctrl+I")).clicked() {
+                if ui
+                    .add(egui::Button::new("Import Audio…").shortcut_text("Ctrl+I"))
+                    .clicked()
+                {
                     self.import_dialog();
                     ui.close_menu();
                 }
                 ui.separator();
-                if ui.add(egui::Button::new("Export Mixdown (WAV)…").shortcut_text("Ctrl+E")).clicked() {
+                if ui
+                    .add(egui::Button::new("Export Mixdown (WAV)…").shortcut_text("Ctrl+E"))
+                    .clicked()
+                {
                     self.export_mixdown();
                     ui.close_menu();
                 }
@@ -227,56 +292,116 @@ impl App {
                 }
             });
             ui.menu_button("Edit", |ui| {
-                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new("Undo").shortcut_text("Ctrl+Z")).clicked() {
+                if ui
+                    .add_enabled(
+                        !self.undo.is_empty(),
+                        egui::Button::new("Undo").shortcut_text("Ctrl+Z"),
+                    )
+                    .clicked()
+                {
                     self.undo();
                     ui.close_menu();
                 }
-                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new("Redo").shortcut_text("Ctrl+Shift+Z")).clicked() {
+                if ui
+                    .add_enabled(
+                        !self.redo.is_empty(),
+                        egui::Button::new("Redo").shortcut_text("Ctrl+Shift+Z"),
+                    )
+                    .clicked()
+                {
                     self.redo();
                     ui.close_menu();
                 }
                 ui.separator();
                 let has_clip = self.sel_clip.is_some();
-                if ui.add_enabled(has_clip, egui::Button::new("Cut").shortcut_text("Ctrl+X")).clicked() {
+                if ui
+                    .add_enabled(has_clip, egui::Button::new("Cut").shortcut_text("Ctrl+X"))
+                    .clicked()
+                {
                     self.cut_selection();
                     ui.close_menu();
                 }
-                if ui.add_enabled(has_clip, egui::Button::new("Copy").shortcut_text("Ctrl+C")).clicked() {
+                if ui
+                    .add_enabled(has_clip, egui::Button::new("Copy").shortcut_text("Ctrl+C"))
+                    .clicked()
+                {
                     self.copy_selection();
                     ui.close_menu();
                 }
-                if ui.add_enabled(self.clipboard.is_some(), egui::Button::new("Paste").shortcut_text("Ctrl+V")).clicked() {
+                if ui
+                    .add_enabled(
+                        self.clipboard.is_some(),
+                        egui::Button::new("Paste").shortcut_text("Ctrl+V"),
+                    )
+                    .clicked()
+                {
                     self.paste_clipboard();
                     ui.close_menu();
                 }
-                if ui.add_enabled(has_clip, egui::Button::new("Duplicate").shortcut_text("Ctrl+D")).clicked() {
+                if ui
+                    .add_enabled(
+                        has_clip,
+                        egui::Button::new("Duplicate").shortcut_text("Ctrl+D"),
+                    )
+                    .clicked()
+                {
                     self.duplicate_clip();
                     ui.close_menu();
                 }
-                if ui.add_enabled(has_clip, egui::Button::new("Delete Selection").shortcut_text("Del")).clicked() {
+                if ui
+                    .add_enabled(
+                        has_clip,
+                        egui::Button::new("Delete Selection").shortcut_text("Del"),
+                    )
+                    .clicked()
+                {
                     self.delete_selected();
                     ui.close_menu();
                 }
                 ui.separator();
-                if ui.add_enabled(has_clip, egui::Button::new("Split at Playhead").shortcut_text("B")).clicked() {
+                if ui
+                    .add_enabled(
+                        has_clip,
+                        egui::Button::new("Split at Playhead").shortcut_text("B"),
+                    )
+                    .clicked()
+                {
                     self.split_at_playhead();
                     ui.close_menu();
                 }
-                if ui.add_enabled(has_clip, egui::Button::new("Trim Start to Playhead").shortcut_text("[")).clicked() {
+                if ui
+                    .add_enabled(
+                        has_clip,
+                        egui::Button::new("Trim Start to Playhead").shortcut_text("["),
+                    )
+                    .clicked()
+                {
                     self.trim_start_to_playhead();
                     ui.close_menu();
                 }
-                if ui.add_enabled(has_clip, egui::Button::new("Trim End to Playhead").shortcut_text("]")).clicked() {
+                if ui
+                    .add_enabled(
+                        has_clip,
+                        egui::Button::new("Trim End to Playhead").shortcut_text("]"),
+                    )
+                    .clicked()
+                {
                     self.trim_end_to_playhead();
                     ui.close_menu();
                 }
                 ui.separator();
                 let audio = self.sel_is_audio();
-                if ui.add_enabled(audio, egui::Button::new("Normalize Audio")).clicked() {
+                if ui
+                    .add_enabled(audio, egui::Button::new("Normalize Audio"))
+                    .clicked()
+                {
                     self.audio_process(AudioOp::Normalize);
                     ui.close_menu();
                 }
-                if ui.add_enabled(audio, egui::Button::new("Reverse Audio")).clicked() {
+                if ui
+                    .add_enabled(audio, egui::Button::new("Reverse Audio"))
+                    .clicked()
+                {
                     self.audio_process(AudioOp::Reverse);
                     ui.close_menu();
                 }
@@ -285,7 +410,11 @@ impl App {
                 ui.menu_button("Add Instrument", |ui| {
                     for c in Category::ALL {
                         ui.menu_button(c.name(), |ui| {
-                            for inst in Instrument::ALL.iter().copied().filter(|i| i.category() == c) {
+                            for inst in Instrument::ALL
+                                .iter()
+                                .copied()
+                                .filter(|i| i.category() == c)
+                            {
                                 if ui.button(inst.name()).clicked() {
                                     self.add_track(inst);
                                     ui.close_menu();
@@ -327,14 +456,20 @@ impl App {
                 });
                 ui.separator();
                 let has = !self.project.tracks.is_empty();
-                if ui.add_enabled(has, egui::Button::new("Delete Selected Track")).clicked() {
+                if ui
+                    .add_enabled(has, egui::Button::new("Delete Selected Track"))
+                    .clicked()
+                {
                     self.delete_track(self.sel_track);
                     ui.close_menu();
                 }
             });
             self.ui_view_menu(ui);
             ui.menu_button("Help", |ui| {
-                if ui.add(egui::Button::new("Help & Shortcuts").shortcut_text("F1")).clicked() {
+                if ui
+                    .add(egui::Button::new("Help & Shortcuts").shortcut_text("F1"))
+                    .clicked()
+                {
                     self.show_help = true;
                     ui.close_menu();
                 }
@@ -352,7 +487,9 @@ impl App {
             // le numéro de version suit `version` dans Cargo.toml
             ui.label(RichText::new(env!("CARGO_PKG_VERSION")).color(GREY));
             ui.add_space(20.0);
-            let rw = egui::Button::new(RichText::new("⏮").size(16.0)).rounding(Rounding::same(18.0)).min_size(vec2(40.0, 32.0));
+            let rw = egui::Button::new(RichText::new("⏮").size(16.0))
+                .rounding(Rounding::same(18.0))
+                .min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
                 self.rewind();
             }
@@ -366,16 +503,36 @@ impl App {
             }
             // record button (count-in, then the notes you play become a clip)
             let rec_on = self.is_recording();
-            let rec = egui::Button::new(RichText::new("●").size(16.0).color(if rec_on { Color32::WHITE } else { RED }))
-                .fill(if rec_on { RED } else { Color32::from_rgb(243, 243, 247) })
-                .rounding(Rounding::same(18.0))
-                .min_size(vec2(40.0, 32.0));
-            if ui.add(rec).on_hover_text("Record (R) - count-in first, then plays your notes into a new clip").clicked() {
+            let rec = egui::Button::new(RichText::new("●").size(16.0).color(if rec_on {
+                Color32::WHITE
+            } else {
+                RED
+            }))
+            .fill(if rec_on {
+                RED
+            } else {
+                Color32::from_rgb(243, 243, 247)
+            })
+            .rounding(Rounding::same(18.0))
+            .min_size(vec2(40.0, 32.0));
+            if ui
+                .add(rec)
+                .on_hover_text("Record (R) - count-in first, then plays your notes into a new clip")
+                .clicked()
+            {
                 self.toggle_record();
             }
             ui.add_space(10.0);
             let mut bpm = self.project.bpm;
-            if ui.add(egui::DragValue::new(&mut bpm).range(40.0..=240.0).speed(0.5).suffix(" BPM")).changed() {
+            if ui
+                .add(
+                    egui::DragValue::new(&mut bpm)
+                        .range(40.0..=240.0)
+                        .speed(0.5)
+                        .suffix(" BPM"),
+                )
+                .changed()
+            {
                 let b = self.pos_beats;
                 self.project.bpm = bpm;
                 self.push();
@@ -388,11 +545,22 @@ impl App {
             self.loop_button(ui);
             ui.add_space(6.0);
             let b = self.pos_beats.max(0.0);
-            let txt = format!("{}.{}.{}", (b / 4.0) as u32 + 1, (b % 4.0) as u32 + 1, ((b % 1.0) * 4.0) as u32 + 1);
+            let txt = format!(
+                "{}.{}.{}",
+                (b / 4.0) as u32 + 1,
+                (b % 4.0) as u32 + 1,
+                ((b % 1.0) * 4.0) as u32 + 1
+            );
             ui.label(RichText::new(txt).monospace().size(16.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let help = egui::Button::new(RichText::new("?").size(15.0).strong()).rounding(Rounding::same(15.0)).min_size(vec2(30.0, 30.0));
-                if ui.add(help).on_hover_text("Help & shortcuts (F1)").clicked() {
+                let help = egui::Button::new(RichText::new("?").size(15.0).strong())
+                    .rounding(Rounding::same(15.0))
+                    .min_size(vec2(30.0, 30.0));
+                if ui
+                    .add(help)
+                    .on_hover_text("Help & shortcuts (F1)")
+                    .clicked()
+                {
                     self.show_help = true;
                 }
                 ui.menu_button("Export", |ui| {
@@ -426,12 +594,24 @@ impl App {
         // the star sits left of the "+" button and takes its own clicks
         let star_c = pos2(rect.right() - 46.0, rect.center().y);
         let sresp = ui
-            .interact(Rect::from_center_size(star_c, vec2(22.0, 22.0)), ui.id().with(("star", inst.name())), Sense::click())
-            .on_hover_text(if fav { "Remove from favourites" } else { "Add to favourites" });
+            .interact(
+                Rect::from_center_size(star_c, vec2(22.0, 22.0)),
+                ui.id().with(("star", inst.name())),
+                Sense::click(),
+            )
+            .on_hover_text(if fav {
+                "Remove from favourites"
+            } else {
+                "Add to favourites"
+            });
         // le « + » est le seul clic qui ajoute une piste
         let plus_c = pos2(rect.right() - 20.0, rect.center().y);
         let presp = ui
-            .interact(Rect::from_center_size(plus_c, vec2(24.0, 24.0)), ui.id().with(("plus", inst.name())), Sense::click())
+            .interact(
+                Rect::from_center_size(plus_c, vec2(24.0, 24.0)),
+                ui.id().with(("plus", inst.name())),
+                Sense::click(),
+            )
             .on_hover_text("Add as a new track (or drag it onto the timeline)");
         let row_hover = ui.rect_contains_pointer(rect);
         let current = matches!(
@@ -444,11 +624,29 @@ impl App {
         } else if row_hover {
             p.rect_filled(rect, 12.0, Color32::from_rgb(243, 243, 247));
         }
-        let tile = Rect::from_min_size(pos2(rect.left() + 8.0, rect.center().y - 17.0), vec2(34.0, 34.0));
+        let tile = Rect::from_min_size(
+            pos2(rect.left() + 8.0, rect.center().y - 17.0),
+            vec2(34.0, 34.0),
+        );
         draw_tile(p, tile, inst);
-        let tp = p.with_clip_rect(Rect::from_min_max(rect.min, pos2(rect.right() - 62.0, rect.bottom())));
-        tp.text(pos2(tile.right() + 12.0, rect.center().y - 8.0), Align2::LEFT_CENTER, inst.name(), FontId::proportional(13.5), INK);
-        tp.text(pos2(tile.right() + 12.0, rect.center().y + 9.0), Align2::LEFT_CENTER, inst.blurb(), FontId::proportional(11.0), GREY);
+        let tp = p.with_clip_rect(Rect::from_min_max(
+            rect.min,
+            pos2(rect.right() - 62.0, rect.bottom()),
+        ));
+        tp.text(
+            pos2(tile.right() + 12.0, rect.center().y - 8.0),
+            Align2::LEFT_CENTER,
+            inst.name(),
+            FontId::proportional(13.5),
+            INK,
+        );
+        tp.text(
+            pos2(tile.right() + 12.0, rect.center().y + 9.0),
+            Align2::LEFT_CENTER,
+            inst.blurb(),
+            FontId::proportional(11.0),
+            GREY,
+        );
         if fav {
             draw_star(p, star_c, 7.5, Some(ACCENT), ACCENT);
         } else if row_hover {
@@ -457,8 +655,14 @@ impl App {
         if row_hover && self.drag_inst.is_none() {
             let c = plus_c;
             p.circle_filled(c, if presp.hovered() { 11.5 } else { 10.0 }, ACCENT);
-            p.line_segment([c - vec2(4.0, 0.0), c + vec2(4.0, 0.0)], stroke(1.6, Color32::WHITE));
-            p.line_segment([c - vec2(0.0, 4.0), c + vec2(0.0, 4.0)], stroke(1.6, Color32::WHITE));
+            p.line_segment(
+                [c - vec2(4.0, 0.0), c + vec2(4.0, 0.0)],
+                stroke(1.6, Color32::WHITE),
+            );
+            p.line_segment(
+                [c - vec2(0.0, 4.0), c + vec2(0.0, 4.0)],
+                stroke(1.6, Color32::WHITE),
+            );
         }
         if sresp.clicked() {
             if fav {
@@ -494,7 +698,14 @@ impl App {
 
                 // header
                 ui.label(RichText::new("Instruments").size(17.0).strong().color(INK));
-                ui.label(RichText::new(format!("{} sounds · drag onto the timeline", Instrument::ALL.len())).size(11.5).color(GREY));
+                ui.label(
+                    RichText::new(format!(
+                        "{} sounds · drag onto the timeline",
+                        Instrument::ALL.len()
+                    ))
+                    .size(11.5)
+                    .color(GREY),
+                );
                 ui.add_space(8.0);
 
                 // search pill
@@ -507,7 +718,12 @@ impl App {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("🔍").size(12.0).color(GREY));
                             let w = (ui.available_width() - 22.0).max(40.0);
-                            ui.add(egui::TextEdit::singleline(&mut st.query).hint_text("Search").frame(false).desired_width(w));
+                            ui.add(
+                                egui::TextEdit::singleline(&mut st.query)
+                                    .hint_text("Search")
+                                    .frame(false)
+                                    .desired_width(w),
+                            );
                             if !st.query.is_empty() && ui.small_button("×").clicked() {
                                 st.query.clear();
                             }
@@ -517,11 +733,15 @@ impl App {
 
                 // category chips
                 let chip = |ui: &mut egui::Ui, label: &str, sel: bool| -> bool {
-                    let b = egui::Button::new(RichText::new(label).size(12.0).color(if sel { Color32::WHITE } else { INK }))
-                        .fill(if sel { ACCENT } else { soft })
-                        .stroke(egui::Stroke::NONE)
-                        .rounding(Rounding::same(12.0))
-                        .min_size(vec2(0.0, 24.0));
+                    let b = egui::Button::new(RichText::new(label).size(12.0).color(if sel {
+                        Color32::WHITE
+                    } else {
+                        INK
+                    }))
+                    .fill(if sel { ACCENT } else { soft })
+                    .stroke(egui::Stroke::NONE)
+                    .rounding(Rounding::same(12.0))
+                    .min_size(vec2(0.0, 24.0));
                     ui.add(b).clicked()
                 };
                 ui.horizontal_wrapped(|ui| {
@@ -555,7 +775,9 @@ impl App {
 
                 // scrollable list
                 let h = (ui.available_height() - 50.0).max(100.0);
-                let mut area = egui::ScrollArea::vertical().max_height(h).auto_shrink([false, false]);
+                let mut area = egui::ScrollArea::vertical()
+                    .max_height(h)
+                    .auto_shrink([false, false]);
                 if let Some(o) = st.force.take() {
                     area = area.vertical_scroll_offset(o);
                 }
@@ -563,8 +785,11 @@ impl App {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     let mut shown = 0;
                     for c in Category::ALL {
-                        let items: Vec<Instrument> =
-                            Instrument::ALL.iter().copied().filter(|i| i.category() == c && matches(i)).collect();
+                        let items: Vec<Instrument> = Instrument::ALL
+                            .iter()
+                            .copied()
+                            .filter(|i| i.category() == c && matches(i))
+                            .collect();
                         if items.is_empty() {
                             continue;
                         }
@@ -572,8 +797,17 @@ impl App {
                             ui.add_space(8.0);
                             ui.horizontal(|ui| {
                                 let (r, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
-                                ui.painter().circle_filled(r.center(), 3.5, PALETTE[c as usize % 8]);
-                                ui.label(RichText::new(c.name().to_uppercase()).size(10.5).color(GREY).strong());
+                                ui.painter().circle_filled(
+                                    r.center(),
+                                    3.5,
+                                    PALETTE[c as usize % 8],
+                                );
+                                ui.label(
+                                    RichText::new(c.name().to_uppercase())
+                                        .size(10.5)
+                                        .color(GREY)
+                                        .strong(),
+                                );
                             });
                             ui.add_space(2.0);
                         }
@@ -601,7 +835,11 @@ impl App {
                 if self.drag_inst.is_some() {
                     if let Some(p) = ui.ctx().pointer_latest_pos() {
                         let r = out.inner_rect;
-                        if p.x >= r.left() && p.x <= r.right() && p.y >= r.top() - 40.0 && p.y <= r.bottom() + 40.0 {
+                        if p.x >= r.left()
+                            && p.x <= r.right()
+                            && p.y >= r.top() - 40.0
+                            && p.y <= r.bottom() + 40.0
+                        {
                             let zone = 48.0;
                             let edge = if p.y < r.top() + zone {
                                 -(1.0 - ((p.y - r.top()) / zone).clamp(0.0, 1.0))

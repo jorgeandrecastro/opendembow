@@ -11,17 +11,31 @@
 use crate::project::*;
 use crate::theme::*;
 use crate::{App, Drag};
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, RichText, Rounding, Sense};
+use eframe::egui::{
+    self, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, RichText, Rounding, Sense, pos2,
+    vec2,
+};
 
 const KEYS_W: f32 = 62.0;
 pub(crate) const ROW_H: f32 = 15.0;
 const MIN_LEN_FREE: f64 = 1.0 / 32.0;
 
 /// (label, length in beats): 1/32 ... whole note. Used for the grid and the note size.
-pub const SIZES: [(&str, f64); 6] = [("1/32", 0.125), ("1/16", 0.25), ("1/8", 0.5), ("1/4", 1.0), ("1/2", 2.0), ("1", 4.0)];
+pub const SIZES: [(&str, f64); 6] = [
+    ("1/32", 0.125),
+    ("1/16", 0.25),
+    ("1/8", 0.5),
+    ("1/4", 1.0),
+    ("1/2", 2.0),
+    ("1", 4.0),
+];
 
 pub fn size_label(v: f64) -> &'static str {
-    SIZES.iter().find(|(_, s)| (s - v).abs() < 1e-9).map(|(l, _)| *l).unwrap_or("custom")
+    SIZES
+        .iter()
+        .find(|(_, s)| (s - v).abs() < 1e-9)
+        .map(|(l, _)| *l)
+        .unwrap_or("custom")
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -62,11 +76,19 @@ struct RollState {
 
 impl Default for RollState {
     fn default() -> Self {
-        Self { scale: Scale::All, root: 0, sel: Vec::new(), marquee: None, base: Vec::new() }
+        Self {
+            scale: Scale::All,
+            root: 0,
+            sel: Vec::new(),
+            marquee: None,
+            base: Vec::new(),
+        }
     }
 }
 
-const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const NOTE_NAMES: [&str; 12] = [
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
 
 fn is_in_scale(key: u8, scale: Scale, root: u8) -> bool {
     if scale == Scale::All {
@@ -106,7 +128,9 @@ impl App {
     /// Ctrl+D dans le piano roll : duplique les notes sélectionnées juste après elles-mêmes.
     /// Renvoie false s'il n'y a pas de notes sélectionnées (→ on duplique le clip).
     pub fn duplicate_notes(&mut self) -> bool {
-        let Some((t, c)) = self.sel_midi() else { return false };
+        let Some((t, c)) = self.sel_midi() else {
+            return false;
+        };
         let mut sel = self.selected_note_indices();
         let g = self.grid;
         let len = self.notes_ref(t, c).map_or(0, |v| v.len());
@@ -188,12 +212,24 @@ impl App {
                     ui.selectable_value(&mut st.scale, Scale::All, Scale::All.name());
                     ui.selectable_value(&mut st.scale, Scale::Major, Scale::Major.name());
                     ui.selectable_value(&mut st.scale, Scale::Minor, Scale::Minor.name());
-                    ui.selectable_value(&mut st.scale, Scale::PentatonicMajor, Scale::PentatonicMajor.name());
-                    ui.selectable_value(&mut st.scale, Scale::PentatonicMinor, Scale::PentatonicMinor.name());
+                    ui.selectable_value(
+                        &mut st.scale,
+                        Scale::PentatonicMajor,
+                        Scale::PentatonicMajor.name(),
+                    );
+                    ui.selectable_value(
+                        &mut st.scale,
+                        Scale::PentatonicMinor,
+                        Scale::PentatonicMinor.name(),
+                    );
                     ui.selectable_value(&mut st.scale, Scale::Blues, Scale::Blues.name());
                 });
 
-            ui.label(RichText::new("Alt = sans magnétisme").size(10.5).color(GREY));
+            ui.label(
+                RichText::new("Alt = sans magnétisme")
+                    .size(10.5)
+                    .color(GREY),
+            );
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.small_button("+").clicked() {
@@ -217,7 +253,8 @@ impl App {
         let kr = ui.interact(keys_r, ui.id().with("rollkeys"), Sense::click_and_drag());
 
         if gr.hovered() {
-            let (zoom, scroll, hover) = ui.input(|i| (i.zoom_delta(), i.raw_scroll_delta, i.pointer.hover_pos()));
+            let (zoom, scroll, hover) =
+                ui.input(|i| (i.zoom_delta(), i.raw_scroll_delta, i.pointer.hover_pos()));
             if zoom != 1.0 {
                 if let Some(p) = hover {
                     let anchor = self.pr_scroll + ((p.x - grid.left()) / self.pr_ppb) as f64;
@@ -237,7 +274,8 @@ impl App {
         let g = self.grid;
 
         // modificateurs (Alt = pas de magnétisme)
-        let (shift, alt, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt, i.modifiers.command));
+        let (shift, alt, cmd) =
+            ui.input(|i| (i.modifiers.shift, i.modifiers.alt, i.modifiers.command));
         let snap = !alt;
         let min_len = if snap { g } else { MIN_LEN_FREE };
         let q = |x: f64| if snap { (x / g).round() * g } else { x };
@@ -247,7 +285,8 @@ impl App {
         let hit = |notes: &Vec<Note>, p: Pos2| -> Option<(usize, u8)> {
             for (i, n) in notes.iter().enumerate().rev() {
                 let y = grid.top() + (top - n.key as i32) as f32 * ROW_H;
-                let r = Rect::from_min_max(pos2(gx(n.start), y), pos2(gx(n.start + n.len), y + ROW_H));
+                let r =
+                    Rect::from_min_max(pos2(gx(n.start), y), pos2(gx(n.start + n.len), y + ROW_H));
                 if r.contains(p) {
                     let z = 6.0f32.min(r.width() / 3.0);
                     let edge = if p.x > r.right() - z {
@@ -265,7 +304,9 @@ impl App {
 
         // ------------------------------------------------------------ note editing
         if gr.drag_started() {
-            let origin = ui.input(|i| i.pointer.press_origin()).or_else(|| gr.interact_pointer_pos());
+            let origin = ui
+                .input(|i| i.pointer.press_origin())
+                .or_else(|| gr.interact_pointer_pos());
             if let Some(p) = origin {
                 let h = self.notes_ref(t, c).and_then(|n| hit(n, p));
                 if let Some((i, edge)) = h {
@@ -286,8 +327,15 @@ impl App {
                     if let Some(n) = n {
                         self.drag = match edge {
                             1 => Drag::NoteResize { idx: i },
-                            2 => Drag::NoteResizeL { idx: i, end: n.start + n.len },
-                            _ => Drag::NoteMove { idx: i, grab_beat: beat_at(p.x) - n.start, grab_key: key_at(p.y) - n.key as i32 },
+                            2 => Drag::NoteResizeL {
+                                idx: i,
+                                end: n.start + n.len,
+                            },
+                            _ => Drag::NoteMove {
+                                idx: i,
+                                grab_beat: beat_at(p.x) - n.start,
+                                grab_key: key_at(p.y) - n.key as i32,
+                            },
                         };
                         self.audition(t, n.key);
                     }
@@ -296,7 +344,12 @@ impl App {
                     let start = qf(beat_at(p.x)).max(0.0);
                     self.checkpoint();
                     if let Some(n) = self.notes_mut(t, c) {
-                        n.push(Note { start, len: g, key, vel: 0.8 });
+                        n.push(Note {
+                            start,
+                            len: g,
+                            key,
+                            vel: 0.8,
+                        });
                     }
                     if let Some(idx) = self.notes_ref(t, c).map(|v| v.len() - 1) {
                         st.sel = vec![idx];
@@ -324,7 +377,10 @@ impl App {
                     if let Some(v) = self.notes_ref(t, c) {
                         for (i, n) in v.iter().enumerate() {
                             let y = grid.top() + (top - n.key as i32) as f32 * ROW_H;
-                            let r = Rect::from_min_max(pos2(gx(n.start), y), pos2(gx(n.start + n.len), y + ROW_H));
+                            let r = Rect::from_min_max(
+                                pos2(gx(n.start), y),
+                                pos2(gx(n.start + n.len), y + ROW_H),
+                            );
                             if r.intersects(mr) && !sel.contains(&i) {
                                 sel.push(i);
                             }
@@ -333,16 +389,38 @@ impl App {
                     st.sel = sel;
                 } else {
                     match self.drag {
-                        Drag::NoteMove { idx, grab_beat, grab_key } => {
-                            let group: Vec<usize> = if st.sel.contains(&idx) { st.sel.clone() } else { vec![idx] };
+                        Drag::NoteMove {
+                            idx,
+                            grab_beat,
+                            grab_key,
+                        } => {
+                            let group: Vec<usize> = if st.sel.contains(&idx) {
+                                st.sel.clone()
+                            } else {
+                                vec![idx]
+                            };
                             let want_start = q(beat_at(p.x) - grab_beat);
                             let want_key = key_at(p.y) - grab_key;
                             let mut new_key = None;
                             if let Some(v) = self.notes_mut(t, c) {
                                 if let Some(pn) = v.get(idx).cloned() {
-                                    let min_s = group.iter().filter_map(|&i| v.get(i)).map(|n| n.start).fold(f64::MAX, f64::min);
-                                    let min_k = group.iter().filter_map(|&i| v.get(i)).map(|n| n.key as i32).min().unwrap_or(0);
-                                    let max_k = group.iter().filter_map(|&i| v.get(i)).map(|n| n.key as i32).max().unwrap_or(127);
+                                    let min_s = group
+                                        .iter()
+                                        .filter_map(|&i| v.get(i))
+                                        .map(|n| n.start)
+                                        .fold(f64::MAX, f64::min);
+                                    let min_k = group
+                                        .iter()
+                                        .filter_map(|&i| v.get(i))
+                                        .map(|n| n.key as i32)
+                                        .min()
+                                        .unwrap_or(0);
+                                    let max_k = group
+                                        .iter()
+                                        .filter_map(|&i| v.get(i))
+                                        .map(|n| n.key as i32)
+                                        .max()
+                                        .unwrap_or(127);
                                     let ds = (want_start - pn.start).max(-min_s);
                                     let dk = (want_key - pn.key as i32).clamp(-min_k, 127 - max_k);
                                     if ds != 0.0 || dk != 0 {
@@ -365,7 +443,11 @@ impl App {
                             self.push();
                         }
                         Drag::NoteResize { idx } => {
-                            let group: Vec<usize> = if st.sel.contains(&idx) { st.sel.clone() } else { vec![idx] };
+                            let group: Vec<usize> = if st.sel.contains(&idx) {
+                                st.sel.clone()
+                            } else {
+                                vec![idx]
+                            };
                             let end = q(beat_at(p.x));
                             let mut last = g;
                             if let Some(v) = self.notes_mut(t, c) {
@@ -400,7 +482,10 @@ impl App {
         }
         if gr.drag_stopped() {
             st.marquee = None;
-            if matches!(self.drag, Drag::NoteMove { .. } | Drag::NoteResize { .. } | Drag::NoteResizeL { .. }) {
+            if matches!(
+                self.drag,
+                Drag::NoteMove { .. } | Drag::NoteResize { .. } | Drag::NoteResizeL { .. }
+            ) {
                 self.drag = Drag::None;
             }
         }
@@ -409,7 +494,10 @@ impl App {
                 .input(|i| i.pointer.hover_pos())
                 .and_then(|hp| self.notes_ref(t, c).and_then(|n| hit(n, hp)))
                 .map_or(false, |(_, e)| e != 0)
-                || matches!(self.drag, Drag::NoteResize { .. } | Drag::NoteResizeL { .. });
+                || matches!(
+                    self.drag,
+                    Drag::NoteResize { .. } | Drag::NoteResizeL { .. }
+                );
             if on_edge {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
             } else if self.pen {
@@ -424,7 +512,8 @@ impl App {
                         let cut = q(beat_at(p.x));
                         st.sel = vec![i];
                         if !self.split_note(t, c, i, cut) {
-                            self.status = "Ctrl+click inside a note, away from its edges, to cut it.".into();
+                            self.status =
+                                "Ctrl+click inside a note, away from its edges, to cut it.".into();
                         }
                     }
                     Some((i, _)) if shift => {
@@ -448,9 +537,18 @@ impl App {
                         let len = self.last_len;
                         self.checkpoint();
                         if let Some(n) = self.notes_mut(t, c) {
-                            n.push(Note { start, len, key, vel: 0.8 });
+                            n.push(Note {
+                                start,
+                                len,
+                                key,
+                                vel: 0.8,
+                            });
                         }
-                        st.sel = self.notes_ref(t, c).map(|v| v.len() - 1).into_iter().collect();
+                        st.sel = self
+                            .notes_ref(t, c)
+                            .map(|v| v.len() - 1)
+                            .into_iter()
+                            .collect();
                         self.audition(t, key);
                         self.fit_clip(t, c);
                         self.push();
@@ -468,7 +566,11 @@ impl App {
                 if let Some((i, _)) = self.notes_ref(t, c).and_then(|n| hit(n, p)) {
                     self.checkpoint();
                     // si la note fait partie d'une sélection multiple, on supprime tout le groupe
-                    let mut del: Vec<usize> = if st.sel.contains(&i) { st.sel.clone() } else { vec![i] };
+                    let mut del: Vec<usize> = if st.sel.contains(&i) {
+                        st.sel.clone()
+                    } else {
+                        vec![i]
+                    };
                     del.sort_unstable();
                     del.dedup();
                     if let Some(n) = self.notes_mut(t, c) {
@@ -484,7 +586,8 @@ impl App {
             }
         }
         let hk = if kr.is_pointer_button_down_on() {
-            kr.interact_pointer_pos().map(|p| key_at(p.y).clamp(0, 127) as u8)
+            kr.interact_pointer_pos()
+                .map(|p| key_at(p.y).clamp(0, 127) as u8)
         } else {
             None
         };
@@ -536,7 +639,10 @@ impl App {
                 let d = semis.clamp(-lo, 127 - hi);
                 if d != 0 {
                     self.roll_edit(t, c, &sel, |n| n.key = (n.key as i32 + d) as u8);
-                    if let Some(k) = self.notes_ref(t, c).and_then(|v| sel.last().and_then(|&i| v.get(i)).map(|n| n.key)) {
+                    if let Some(k) = self
+                        .notes_ref(t, c)
+                        .and_then(|v| sel.last().and_then(|&i| v.get(i)).map(|n| n.key))
+                    {
                         self.audition(t, k);
                     }
                 }
@@ -549,7 +655,12 @@ impl App {
             } else if kc(Modifiers::NONE, Key::ArrowRight) {
                 self.roll_edit(t, c, &sel, |n| n.start += g);
             } else if kc(Modifiers::NONE, Key::ArrowLeft) {
-                let min_s = self.notes_ref(t, c).map_or(0.0, |v| sel.iter().filter_map(|&i| v.get(i)).map(|n| n.start).fold(f64::MAX, f64::min));
+                let min_s = self.notes_ref(t, c).map_or(0.0, |v| {
+                    sel.iter()
+                        .filter_map(|&i| v.get(i))
+                        .map(|n| n.start)
+                        .fold(f64::MAX, f64::min)
+                });
                 let d = g.min(min_s.max(0.0));
                 if d > 0.0 {
                     self.roll_edit(t, c, &sel, |n| n.start -= d);
@@ -579,7 +690,11 @@ impl App {
             // Background color logic: standard chromatic when "All", Ableton-style subtle green tint when a scale is selected
             let bg_color = if st.scale != Scale::All {
                 if in_scale {
-                    if black { Color32::from_rgb(230, 245, 235) } else { Color32::from_rgb(240, 250, 242) }
+                    if black {
+                        Color32::from_rgb(230, 245, 235)
+                    } else {
+                        Color32::from_rgb(240, 250, 242)
+                    }
                 } else if black {
                     Color32::from_rgb(235, 235, 238)
                 } else {
@@ -592,14 +707,30 @@ impl App {
             };
 
             gp.rect_filled(row, 0.0, bg_color);
-            let line = if key % 12 == 0 { Color32::from_rgb(214, 214, 220) } else { Color32::from_rgb(240, 240, 244) };
-            gp.line_segment([pos2(row.left(), row.bottom()), pos2(row.right(), row.bottom())], stroke(1.0, line));
+            let line = if key % 12 == 0 {
+                Color32::from_rgb(214, 214, 220)
+            } else {
+                Color32::from_rgb(240, 240, 244)
+            };
+            gp.line_segment(
+                [
+                    pos2(row.left(), row.bottom()),
+                    pos2(row.right(), row.bottom()),
+                ],
+                stroke(1.0, line),
+            );
 
             if let Some(map) = drum {
                 if !(36..=59).contains(&key) {
                     gp.rect_filled(row, 0.0, tint(INK, 6));
                 } else if let Some(nm) = crate::drum_names::name(map, key) {
-                    gp.text(pos2(grid.left() + 8.0, row.center().y), Align2::LEFT_CENTER, nm, FontId::proportional(10.5), GREY);
+                    gp.text(
+                        pos2(grid.left() + 8.0, row.center().y),
+                        Align2::LEFT_CENTER,
+                        nm,
+                        FontId::proportional(10.5),
+                        GREY,
+                    );
                 }
             }
 
@@ -608,7 +739,11 @@ impl App {
             let kr_row = Rect::from_min_size(pos2(keys_r.left(), y), vec2(KEYS_W, ROW_H));
 
             let key_base_color = if st.scale != Scale::All && in_scale {
-                if down { ACCENT } else { Color32::from_rgb(215, 240, 224) }
+                if down {
+                    ACCENT
+                } else {
+                    Color32::from_rgb(215, 240, 224)
+                }
             } else if down {
                 ACCENT
             } else if black {
@@ -623,20 +758,60 @@ impl App {
                 kp.rect_filled(bk, 0.0, key_base_color);
 
                 if st.scale != Scale::All {
-                    let full_label = format!("{}{}", NOTE_NAMES[(key % 12) as usize], (key / 12) as i32 - 1);
-                    let text_color = if down { Color32::WHITE } else { Color32::from_rgb(180, 180, 185) };
-                    kp.text(bk.center(), Align2::CENTER_CENTER, full_label, FontId::proportional(9.5), text_color);
+                    let full_label = format!(
+                        "{}{}",
+                        NOTE_NAMES[(key % 12) as usize],
+                        (key / 12) as i32 - 1
+                    );
+                    let text_color = if down {
+                        Color32::WHITE
+                    } else {
+                        Color32::from_rgb(180, 180, 185)
+                    };
+                    kp.text(
+                        bk.center(),
+                        Align2::CENTER_CENTER,
+                        full_label,
+                        FontId::proportional(9.5),
+                        text_color,
+                    );
                 }
             } else {
                 kp.rect_filled(kr_row, 0.0, key_base_color);
-                kp.line_segment([pos2(kr_row.left(), kr_row.bottom()), pos2(kr_row.right(), kr_row.bottom())], stroke(1.0, HAIR));
+                kp.line_segment(
+                    [
+                        pos2(kr_row.left(), kr_row.bottom()),
+                        pos2(kr_row.right(), kr_row.bottom()),
+                    ],
+                    stroke(1.0, HAIR),
+                );
 
                 if st.scale != Scale::All {
-                    let full_label = format!("{}{}", NOTE_NAMES[(key % 12) as usize], (key / 12) as i32 - 1);
-                    let text_color = if down { Color32::WHITE } else { Color32::from_rgb(90, 90, 95) };
-                    kp.text(pos2(kr_row.right() - 20.0, kr_row.center().y), Align2::CENTER_CENTER, full_label, FontId::proportional(9.5), text_color);
+                    let full_label = format!(
+                        "{}{}",
+                        NOTE_NAMES[(key % 12) as usize],
+                        (key / 12) as i32 - 1
+                    );
+                    let text_color = if down {
+                        Color32::WHITE
+                    } else {
+                        Color32::from_rgb(90, 90, 95)
+                    };
+                    kp.text(
+                        pos2(kr_row.right() - 20.0, kr_row.center().y),
+                        Align2::CENTER_CENTER,
+                        full_label,
+                        FontId::proportional(9.5),
+                        text_color,
+                    );
                 } else if key % 12 == 0 {
-                    kp.text(pos2(kr_row.right() - 15.0, kr_row.center().y), Align2::CENTER_CENTER, format!("C{}", key / 12 - 1), FontId::proportional(10.0), GREY);
+                    kp.text(
+                        pos2(kr_row.right() - 15.0, kr_row.center().y),
+                        Align2::CENTER_CENTER,
+                        format!("C{}", key / 12 - 1),
+                        FontId::proportional(10.0),
+                        GREY,
+                    );
                 }
             }
         }
@@ -648,18 +823,32 @@ impl App {
         for b in b0..=b1 {
             let x = gx(b as f64);
             let bar = b.rem_euclid(4) == 0;
-            let lc = if bar { Color32::from_rgb(205, 205, 212) } else { Color32::from_rgb(232, 232, 237) };
-            gp.line_segment([pos2(x, grid.top()), pos2(x, grid.bottom())], stroke(1.0, lc));
+            let lc = if bar {
+                Color32::from_rgb(205, 205, 212)
+            } else {
+                Color32::from_rgb(232, 232, 237)
+            };
+            gp.line_segment(
+                [pos2(x, grid.top()), pos2(x, grid.bottom())],
+                stroke(1.0, lc),
+            );
             if show_sub {
                 for q in 1..steps {
                     let xq = gx(b as f64 + q as f64 * g);
-                    gp.line_segment([pos2(xq, grid.top()), pos2(xq, grid.bottom())], stroke(1.0, Color32::from_rgb(243, 243, 246)));
+                    gp.line_segment(
+                        [pos2(xq, grid.top()), pos2(xq, grid.bottom())],
+                        stroke(1.0, Color32::from_rgb(243, 243, 246)),
+                    );
                 }
             }
         }
         let ex = gx(clip.len);
         if ex < grid.right() {
-            gp.rect_filled(Rect::from_min_max(pos2(ex.max(grid.left()), grid.top()), grid.right_bottom()), 0.0, tint(INK, 12));
+            gp.rect_filled(
+                Rect::from_min_max(pos2(ex.max(grid.left()), grid.top()), grid.right_bottom()),
+                0.0,
+                tint(INK, 12),
+            );
         }
 
         if let ClipKind::Midi(notes) = &clip.kind {
@@ -669,8 +858,15 @@ impl App {
                 }
                 let selected = st.sel.contains(&i);
                 let y = grid.top() + (top - n.key as i32) as f32 * ROW_H;
-                let r = Rect::from_min_max(pos2(gx(n.start), y + 1.0), pos2(gx(n.start + n.len), y + ROW_H - 1.0));
-                let alpha = if selected { 255 } else { (110.0 + n.vel * 145.0) as u8 };
+                let r = Rect::from_min_max(
+                    pos2(gx(n.start), y + 1.0),
+                    pos2(gx(n.start + n.len), y + ROW_H - 1.0),
+                );
+                let alpha = if selected {
+                    255
+                } else {
+                    (110.0 + n.vel * 145.0) as u8
+                };
                 gp.rect_filled(r, Rounding::same(4.0), tint(col, alpha));
                 if selected {
                     gp.rect_stroke(r, Rounding::same(4.0), stroke(1.5, INK));

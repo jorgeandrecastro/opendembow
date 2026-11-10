@@ -1,16 +1,15 @@
-//! Effects: per-track EQ, compressor, reverb and delay, plus the "Mixer & Effects" panel
-//! (track strips, Master spectrum + dBFS meters, effect cards).
+//! Effects: per-track EQ, compressor, reverb and delay (settings + DSP).
 //!
 //! The DSP (`FxProcessor`) does not depend on the UI. The engine owns one `FxProcessor` per track
 //! and calls, on the track's stereo buffers, BEFORE volume/pan:
 //!
 //! ```ignore
 //! fx_proc[t].process_block(&project.tracks[t].fx, &mut left, &mut right);
+//! crate::curves::publish_gr(t, fx_proc[t].gain_reduction_db()); // 0.11: live gain-reduction meter
 //! ```
+//!
+//! The Mixer & Effects panel lives in `mixer.rs`; the EQ / compressor curves in `curves.rs`.
 
-use crate::theme::*;
-use crate::App;
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, RichText, Rounding, Sense, Shape};
 use std::f32::consts::PI;
 
 // ======================================================================
@@ -20,10 +19,13 @@ use std::f32::consts::PI;
 #[derive(Clone, PartialEq)]
 pub struct EqFx {
     pub on: bool,
-    pub low: f32,      // dB, shelf at 120 Hz
-    pub mid: f32,      // dB, peak
-    pub mid_freq: f32, // Hz
-    pub high: f32,     // dB, shelf at 6 kHz
+    pub low: f32,       // dB, low shelf
+    pub mid: f32,       // dB, peak
+    pub mid_freq: f32,  // Hz
+    pub high: f32,      // dB, high shelf
+    pub low_freq: f32,  // Hz, shelf corner (0.11)
+    pub mid_q: f32,     // peak width (0.11)
+    pub high_freq: f32, // Hz, shelf corner (0.11)
 }
 
 #[derive(Clone, PartialEq)]
@@ -62,22 +64,48 @@ pub struct FxSettings {
 
 impl Default for EqFx {
     fn default() -> Self {
-        Self { on: false, low: 0.0, mid: 0.0, mid_freq: 1000.0, high: 0.0 }
+        Self {
+            on: false,
+            low: 0.0,
+            mid: 0.0,
+            mid_freq: 1000.0,
+            high: 0.0,
+            low_freq: 120.0,
+            mid_q: 1.0,
+            high_freq: 6000.0,
+        }
     }
 }
 impl Default for CompFx {
     fn default() -> Self {
-        Self { on: false, threshold: -18.0, ratio: 3.0, attack: 10.0, release: 120.0, makeup: 0.0 }
+        Self {
+            on: false,
+            threshold: -18.0,
+            ratio: 3.0,
+            attack: 10.0,
+            release: 120.0,
+            makeup: 0.0,
+        }
     }
 }
 impl Default for ReverbFx {
     fn default() -> Self {
-        Self { on: false, mix: 0.25, size: 0.5, damp: 0.5 }
+        Self {
+            on: false,
+            mix: 0.25,
+            size: 0.5,
+            damp: 0.5,
+        }
     }
 }
 impl Default for DelayFx {
     fn default() -> Self {
-        Self { on: false, time: 350.0, feedback: 0.35, mix: 0.25 }
+        Self {
+            on: false,
+            time: 350.0,
+            feedback: 0.35,
+            mix: 0.25,
+        }
     }
 }
 
@@ -87,7 +115,7 @@ impl FxSettings {
         !(self.eq.on || self.comp.on || self.reverb.on || self.delay.on)
     }
 
-    /// Every parameter as ("effect.name", value). Booleans are 0 / 1. Used by the MCP server.
+    /// Every parameter as ("effect.name", value). Booleans are 0 / 1. Used by the MCP server and the project file.
     pub fn params(&self) -> Vec<(&'static str, f64)> {
         let b = |x: bool| if x { 1.0 } else { 0.0 };
         vec![
@@ -96,6 +124,9 @@ impl FxSettings {
             ("eq.mid", self.eq.mid as f64),
             ("eq.mid_freq", self.eq.mid_freq as f64),
             ("eq.high", self.eq.high as f64),
+            ("eq.low_freq", self.eq.low_freq as f64),
+            ("eq.mid_q", self.eq.mid_q as f64),
+            ("eq.high_freq", self.eq.high_freq as f64),
             ("comp.on", b(self.comp.on)),
             ("comp.threshold", self.comp.threshold as f64),
             ("comp.ratio", self.comp.ratio as f64),
@@ -123,6 +154,9 @@ impl FxSettings {
             "eq.mid" => self.eq.mid = f.clamp(-15.0, 15.0),
             "eq.mid_freq" => self.eq.mid_freq = f.clamp(200.0, 5000.0),
             "eq.high" => self.eq.high = f.clamp(-15.0, 15.0),
+            "eq.low_freq" => self.eq.low_freq = f.clamp(40.0, 400.0),
+            "eq.mid_q" => self.eq.mid_q = f.clamp(0.3, 6.0),
+            "eq.high_freq" => self.eq.high_freq = f.clamp(2000.0, 16000.0),
             "comp.on" => self.comp.on = on,
             "comp.threshold" => self.comp.threshold = f.clamp(-60.0, 0.0),
             "comp.ratio" => self.comp.ratio = f.clamp(1.0, 20.0),
@@ -161,7 +195,10 @@ struct Biquad {
 
 impl Biquad {
     fn identity() -> Self {
-        Self { b0: 1.0, ..Default::default() }
+        Self {
+            b0: 1.0,
+            ..Default::default()
+        }
     }
     fn set(&mut self, c: [f32; 5]) {
         self.b0 = c[0];
@@ -187,8 +224,15 @@ fn peaking(sr: f32, f: f32, gain_db: f32, q: f32) -> [f32; 5] {
     let a = 10f32.powf(gain_db / 40.0);
     let w = 2.0 * PI * f.min(sr * 0.45) / sr;
     let (s, c) = (w.sin(), w.cos());
-    let al = s / (2.0 * q);
-    norm(1.0 + al * a, -2.0 * c, 1.0 - al * a, 1.0 + al / a, -2.0 * c, 1.0 - al / a)
+    let al = s / (2.0 * q.max(0.1));
+    norm(
+        1.0 + al * a,
+        -2.0 * c,
+        1.0 - al * a,
+        1.0 + al / a,
+        -2.0 * c,
+        1.0 - al / a,
+    )
 }
 
 fn low_shelf(sr: f32, f: f32, gain_db: f32) -> [f32; 5] {
@@ -223,6 +267,24 @@ fn high_shelf(sr: f32, f: f32, gain_db: f32) -> [f32; 5] {
     )
 }
 
+/// Magnitude (dB) of a normalised biquad `[b0, b1, b2, a1, a2]` at `f` Hz.
+fn response_db(c: [f32; 5], sr: f32, f: f32) -> f32 {
+    let w = 2.0 * PI * f.min(sr * 0.499) / sr;
+    let (c1, s1, c2, s2) = (w.cos(), w.sin(), (2.0 * w).cos(), (2.0 * w).sin());
+    let (nr, ni) = (c[0] + c[1] * c1 + c[2] * c2, -(c[1] * s1 + c[2] * s2));
+    let (dr, di) = (1.0 + c[3] * c1 + c[4] * c2, -(c[3] * s1 + c[4] * s2));
+    10.0 * ((nr * nr + ni * ni) / (dr * dr + di * di).max(1e-20))
+        .max(1e-20)
+        .log10()
+}
+
+/// Frequency response of the whole EQ in dB at `f` Hz (what the equalizer curve draws).
+pub fn eq_response_db(eq: &EqFx, sr: f32, f: f32) -> f32 {
+    response_db(low_shelf(sr, eq.low_freq, eq.low), sr, f)
+        + response_db(peaking(sr, eq.mid_freq, eq.mid, eq.mid_q), sr, f)
+        + response_db(high_shelf(sr, eq.high_freq, eq.high), sr, f)
+}
+
 struct Comb {
     buf: Vec<f32>,
     i: usize,
@@ -230,7 +292,11 @@ struct Comb {
 }
 impl Comb {
     fn new(n: usize) -> Self {
-        Self { buf: vec![0.0; n.max(1)], i: 0, store: 0.0 }
+        Self {
+            buf: vec![0.0; n.max(1)],
+            i: 0,
+            store: 0.0,
+        }
     }
     fn tick(&mut self, x: f32, fb: f32, damp: f32) -> f32 {
         let o = self.buf[self.i];
@@ -250,7 +316,10 @@ struct Allpass {
 }
 impl Allpass {
     fn new(n: usize) -> Self {
-        Self { buf: vec![0.0; n.max(1)], i: 0 }
+        Self {
+            buf: vec![0.0; n.max(1)],
+            i: 0,
+        }
     }
     fn tick(&mut self, x: f32) -> f32 {
         let b = self.buf[self.i];
@@ -313,7 +382,10 @@ struct Delay {
 impl Delay {
     fn new(sr: f32) -> Self {
         let n = sr as usize + 2; // up to 1 s
-        Self { buf: [vec![0.0; n], vec![0.0; n]], w: 0 }
+        Self {
+            buf: [vec![0.0; n], vec![0.0; n]],
+            w: 0,
+        }
     }
     fn tick(&mut self, l: f32, r: f32, d: &DelayFx, sr: f32) -> (f32, f32) {
         let n = self.buf[0].len();
@@ -354,14 +426,19 @@ impl FxProcessor {
         }
     }
 
+    /// Current gain reduction of the compressor in dB (>= 0). 0 when the compressor is off.
+    pub fn gain_reduction_db(&self) -> f32 {
+        self.gr
+    }
+
     fn refresh(&mut self, fx: &FxSettings) {
         if self.last.as_ref() == Some(fx) {
             return;
         }
         let sr = self.sr;
-        self.eq[0].set(low_shelf(sr, 120.0, fx.eq.low));
-        self.eq[1].set(peaking(sr, fx.eq.mid_freq, fx.eq.mid, 1.0));
-        self.eq[2].set(high_shelf(sr, 6000.0, fx.eq.high));
+        self.eq[0].set(low_shelf(sr, fx.eq.low_freq, fx.eq.low));
+        self.eq[1].set(peaking(sr, fx.eq.mid_freq, fx.eq.mid, fx.eq.mid_q));
+        self.eq[2].set(high_shelf(sr, fx.eq.high_freq, fx.eq.high));
         self.att = (-1.0 / (sr * fx.comp.attack.max(0.1) * 0.001)).exp();
         self.rel = (-1.0 / (sr * fx.comp.release.max(1.0) * 0.001)).exp();
         self.last = Some(fx.clone());
@@ -370,9 +447,13 @@ impl FxProcessor {
     /// Process a block in place (cheap change detection once per block).
     pub fn process_block(&mut self, fx: &FxSettings, l: &mut [f32], r: &mut [f32]) {
         if fx.is_bypassed() {
+            self.gr = 0.0;
             return;
         }
         self.refresh(fx);
+        if !fx.comp.on {
+            self.gr = 0.0;
+        }
         for (a, b) in l.iter_mut().zip(r.iter_mut()) {
             let (x, y) = self.tick(fx, *a, *b);
             *a = x;
@@ -390,7 +471,8 @@ impl FxProcessor {
         if fx.comp.on {
             let peak = l.abs().max(r.abs()).max(1e-6);
             let level = 20.0 * peak.log10();
-            let target = (level - fx.comp.threshold).max(0.0) * (1.0 - 1.0 / fx.comp.ratio.max(1.0));
+            let target =
+                (level - fx.comp.threshold).max(0.0) * (1.0 - 1.0 / fx.comp.ratio.max(1.0));
             let k = if target > self.gr { self.att } else { self.rel };
             self.gr = k * self.gr + (1.0 - k) * target;
             let g = 10f32.powf((fx.comp.makeup - self.gr) / 20.0);
@@ -404,281 +486,5 @@ impl FxProcessor {
             (l, r) = self.delay.tick(l, r, &fx.delay, self.sr);
         }
         (l, r)
-    }
-}
-
-// ======================================================================
-// UI: knob + effect cards + mixer strips
-// ======================================================================
-
-/// Rotary knob: drag vertically, double-click to reset. Returns true when the value changed.
-fn knob(ui: &mut egui::Ui, label: &str, v: &mut f32, min: f32, max: f32, def: f32, fmt: impl Fn(f32) -> String, col: Color32) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(vec2(50.0, 74.0), Sense::click_and_drag());
-    let mut changed = false;
-    if resp.dragged() {
-        let d = -resp.drag_delta().y / 160.0 * (max - min);
-        let nv = (*v + d).clamp(min, max);
-        if nv != *v {
-            *v = nv;
-            changed = true;
-        }
-    }
-    if resp.double_clicked() && *v != def {
-        *v = def;
-        changed = true;
-    }
-    let _ = resp.on_hover_cursor(egui::CursorIcon::ResizeVertical);
-    let p = ui.painter_at(rect);
-    let c = pos2(rect.center().x, rect.top() + 24.0);
-    let r = 18.0;
-    let t = ((*v - min) / (max - min)).clamp(0.0, 1.0);
-    let arc = |a0: f32, a1: f32| -> Vec<Pos2> {
-        (0..=32)
-            .map(|i| {
-                let a = a0 + (a1 - a0) * i as f32 / 32.0;
-                pos2(c.x + r * a.cos(), c.y + r * a.sin())
-            })
-            .collect()
-    };
-    let (start, span) = (0.75 * PI, 1.5 * PI);
-    p.add(Shape::line(arc(start, start + span), stroke(3.5, Color32::from_rgb(230, 230, 236))));
-    if t > 0.003 {
-        p.add(Shape::line(arc(start, start + span * t), stroke(3.5, col)));
-    }
-    let a = start + span * t;
-    p.line_segment(
-        [pos2(c.x + (r - 10.0) * a.cos(), c.y + (r - 10.0) * a.sin()), pos2(c.x + (r - 3.0) * a.cos(), c.y + (r - 3.0) * a.sin())],
-        stroke(2.0, INK),
-    );
-    p.text(pos2(rect.center().x, rect.top() + 52.0), Align2::CENTER_CENTER, fmt(*v), FontId::proportional(11.0), INK);
-    p.text(pos2(rect.center().x, rect.top() + 66.0), Align2::CENTER_CENTER, label, FontId::proportional(10.0), GREY);
-    changed
-}
-
-fn db(v: f32) -> String {
-    format!("{:+.1} dB", v)
-}
-fn hz(v: f32) -> String {
-    if v >= 1000.0 {
-        format!("{:.1} kHz", v / 1000.0)
-    } else {
-        format!("{:.0} Hz", v)
-    }
-}
-fn pct(v: f32) -> String {
-    format!("{:.0}%", v * 100.0)
-}
-fn ms(v: f32) -> String {
-    format!("{:.0} ms", v)
-}
-
-/// Rounded white card with an ON/OFF pill. `body` returns true if a knob changed.
-fn fx_card(ui: &mut egui::Ui, title: &str, on: &mut bool, col: Color32, body: impl FnOnce(&mut egui::Ui) -> bool) -> bool {
-    let mut changed = false;
-    egui::Frame::none()
-        .fill(Color32::WHITE)
-        .rounding(Rounding::same(12.0))
-        .stroke(stroke(1.0, if *on { col } else { HAIR }))
-        .inner_margin(egui::Margin::same(10.0))
-        .show(ui, |ui| {
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    let txt = RichText::new(if *on { "ON" } else { "OFF" }).size(10.5).strong().color(if *on { Color32::WHITE } else { GREY });
-                    let b = egui::Button::new(txt)
-                        .fill(if *on { col } else { Color32::from_rgb(240, 240, 245) })
-                        .stroke(egui::Stroke::NONE)
-                        .rounding(Rounding::same(8.0))
-                        .min_size(vec2(34.0, 18.0));
-                    if ui.add(b).clicked() {
-                        *on = !*on;
-                        changed = true;
-                    }
-                    ui.label(RichText::new(title).strong().size(13.0));
-                });
-                ui.add_space(2.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    if body(ui) {
-                        changed = true;
-                        *on = true; // touching a knob switches the effect on
-                    }
-                });
-            });
-        });
-    changed
-}
-
-impl App {
-    /// "Mixer & Effects" tab: track strips | Master (spectrum + meters) | effects of the selected track.
-    pub fn ui_fx(&mut self, ui: &mut egui::Ui) {
-        let n = self.project.tracks.len();
-        if n == 0 {
-            ui.add_space(30.0);
-            ui.vertical_centered(|ui| ui.label(RichText::new("Add a track to use the mixer and effects").color(GREY)));
-            return;
-        }
-        let (w, h) = (ui.available_width(), ui.available_height());
-        let tap = self.engine.tap.clone();
-        ui.horizontal_top(|ui| {
-            ui.add_space(14.0);
-            let mw = (n as f32 * 70.0 + 8.0).min(w * 0.30);
-            ui.allocate_ui_with_layout(vec2(mw, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.push_id("mixer_scroll", |ui| {
-                    egui::ScrollArea::horizontal().auto_shrink([false, false]).show(ui, |ui| {
-                        ui.horizontal_top(|ui| {
-                            for i in 0..n {
-                                self.mixer_strip(ui, i);
-                            }
-                        });
-                    });
-                });
-            });
-            ui.add_space(8.0);
-            crate::analyzer::master_panel(ui, &tap, 340.0f32.min(w * 0.34), h);
-            ui.add_space(8.0);
-            let ew = ui.available_width();
-            ui.allocate_ui_with_layout(vec2(ew, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.push_id("fx_scroll", |ui| self.ui_effects(ui, h));
-            });
-        });
-    }
-
-    fn mixer_strip(&mut self, ui: &mut egui::Ui, i: usize) {
-        let tr = &self.project.tracks[i];
-        let name: String = tr.name.chars().take(9).collect();
-        let color = PALETTE[tr.color % 8];
-        let (mut vol, mut pan, mut mute, mut solo) = (tr.volume, tr.pan, tr.mute, tr.solo);
-        let selected = self.sel_track == i;
-        // not clamped: an over (> 0 dBFS) lights the clip LED
-        let level = self.meters.get(i).copied().unwrap_or(0.0);
-        let (mut changed, mut select) = (false, false);
-        let soft = Color32::from_rgb(240, 240, 245);
-
-        egui::Frame::none()
-            .fill(Color32::WHITE)
-            .rounding(Rounding::same(12.0))
-            .stroke(stroke(if selected { 1.5 } else { 1.0 }, if selected { ACCENT } else { HAIR }))
-            .inner_margin(egui::Margin::same(7.0))
-            .show(ui, |ui| {
-                ui.set_width(50.0);
-                ui.vertical_centered(|ui| {
-                    ui.spacing_mut().item_spacing.y = 4.0;
-                    let lab = egui::Label::new(RichText::new(&name).size(11.0).strong().color(color)).sense(Sense::click());
-                    if ui.add(lab).clicked() {
-                        select = true;
-                    }
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().slider_width = 100.0;
-                        let r = ui.add(egui::Slider::new(&mut vol, 0.0..=1.0).vertical().show_value(false));
-                        changed |= r.changed();
-                        // dBFS meter: hover for the held peak, click to reset
-                        crate::meters::meter(ui, vec2(8.0, 106.0), i, level, false);
-                    });
-                    ui.spacing_mut().slider_width = 42.0;
-                    let r = ui.add(egui::Slider::new(&mut pan, -1.0..=1.0).show_value(false));
-                    changed |= r.changed();
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
-                        let m = egui::Button::new(RichText::new("M").size(11.0).strong().color(if mute { Color32::WHITE } else { INK }))
-                            .fill(if mute { RED } else { soft })
-                            .stroke(egui::Stroke::NONE)
-                            .min_size(vec2(20.0, 20.0));
-                        if ui.add(m).clicked() {
-                            mute = !mute;
-                            changed = true;
-                        }
-                        let s = egui::Button::new(RichText::new("S").size(11.0).strong().color(if solo { Color32::WHITE } else { INK }))
-                            .fill(if solo { ACCENT } else { soft })
-                            .stroke(egui::Stroke::NONE)
-                            .min_size(vec2(20.0, 20.0));
-                        if ui.add(s).clicked() {
-                            solo = !solo;
-                            changed = true;
-                        }
-                    });
-                });
-            });
-
-        if select {
-            self.sel_track = i;
-        }
-        if changed {
-            let ctx = ui.ctx().clone();
-            self.edit_checkpoint(&ctx);
-            let t = &mut self.project.tracks[i];
-            t.volume = vol;
-            t.pan = pan;
-            t.mute = mute;
-            t.solo = solo;
-            self.push();
-        }
-    }
-
-    fn ui_effects(&mut self, ui: &mut egui::Ui, h: f32) {
-        let t = self.sel_track.min(self.project.tracks.len() - 1);
-        let tr = &self.project.tracks[t];
-        let (name, col) = (tr.name.clone(), PALETTE[tr.color % 8]);
-        let mut fx = tr.fx.clone();
-        let mut changed = false;
-        let mut reset = false;
-
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Effects - {name}")).strong());
-            ui.label(RichText::new("drag a knob, double-click to reset").size(11.5).color(GREY));
-            if ui.small_button("Reset effects").clicked() {
-                reset = true;
-            }
-        });
-        egui::ScrollArea::horizontal().max_height((h - 28.0).max(80.0)).auto_shrink([false, false]).show(ui, |ui| {
-            ui.horizontal_top(|ui| {
-                ui.spacing_mut().item_spacing.x = 8.0;
-                let eq = &mut fx.eq;
-                changed |= fx_card(ui, "Equalizer", &mut eq.on, col, |ui| {
-                    let a = knob(ui, "Low", &mut eq.low, -15.0, 15.0, 0.0, db, col);
-                    let b = knob(ui, "Mid", &mut eq.mid, -15.0, 15.0, 0.0, db, col);
-                    let mut lf = eq.mid_freq.ln();
-                    let c = knob(ui, "Mid freq", &mut lf, 200f32.ln(), 5000f32.ln(), 1000f32.ln(), |v| hz(v.exp()), col);
-                    if c {
-                        eq.mid_freq = lf.exp();
-                    }
-                    let d = knob(ui, "High", &mut eq.high, -15.0, 15.0, 0.0, db, col);
-                    a | b | c | d
-                });
-                let cp = &mut fx.comp;
-                changed |= fx_card(ui, "Compressor", &mut cp.on, col, |ui| {
-                    let a = knob(ui, "Thresh", &mut cp.threshold, -60.0, 0.0, -18.0, |v| format!("{:.0} dB", v), col);
-                    let b = knob(ui, "Ratio", &mut cp.ratio, 1.0, 20.0, 3.0, |v| format!("{:.1}:1", v), col);
-                    let c = knob(ui, "Attack", &mut cp.attack, 1.0, 100.0, 10.0, ms, col);
-                    let d = knob(ui, "Release", &mut cp.release, 20.0, 1000.0, 120.0, ms, col);
-                    let e = knob(ui, "Makeup", &mut cp.makeup, 0.0, 24.0, 0.0, |v| format!("{:.1} dB", v), col);
-                    a | b | c | d | e
-                });
-                let rv = &mut fx.reverb;
-                changed |= fx_card(ui, "Reverb", &mut rv.on, col, |ui| {
-                    let a = knob(ui, "Mix", &mut rv.mix, 0.0, 1.0, 0.25, pct, col);
-                    let b = knob(ui, "Size", &mut rv.size, 0.0, 1.0, 0.5, pct, col);
-                    let c = knob(ui, "Damp", &mut rv.damp, 0.0, 1.0, 0.5, pct, col);
-                    a | b | c
-                });
-                let dl = &mut fx.delay;
-                changed |= fx_card(ui, "Delay", &mut dl.on, col, |ui| {
-                    let a = knob(ui, "Time", &mut dl.time, 20.0, 1000.0, 350.0, ms, col);
-                    let b = knob(ui, "Feedback", &mut dl.feedback, 0.0, 0.9, 0.35, pct, col);
-                    let c = knob(ui, "Mix", &mut dl.mix, 0.0, 1.0, 0.25, pct, col);
-                    a | b | c
-                });
-            });
-        });
-
-        if reset && fx != FxSettings::default() {
-            fx = FxSettings::default();
-            changed = true;
-        }
-        if changed {
-            let ctx = ui.ctx().clone();
-            self.edit_checkpoint(&ctx);
-            self.project.tracks[t].fx = fx;
-            self.push();
-        }
     }
 }

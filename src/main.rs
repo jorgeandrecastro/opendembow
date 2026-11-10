@@ -5,6 +5,7 @@ mod arrangement;
 mod audio_io;
 mod automation;
 mod chrome;
+mod curves;
 mod drum_names;
 mod drums;
 mod drums_urban;
@@ -22,6 +23,7 @@ mod mcp;
 mod meters;
 mod metronome;
 mod midi_in;
+mod mixer;
 mod pianoroll;
 mod project;
 mod project_io;
@@ -30,7 +32,7 @@ mod theme;
 mod velocity;
 mod view;
 
-use eframe::egui::{self, pos2, Color32, Key, Rect};
+use eframe::egui::{self, Color32, Key, Rect, pos2};
 use engine::Engine;
 use instruments::Instrument;
 use project::*;
@@ -45,20 +47,41 @@ fn main() -> eframe::Result {
             .with_icon(std::sync::Arc::new(chrome::app_icon())),
         ..Default::default()
     };
-    eframe::run_native("OpenDembow", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
+    eframe::run_native(
+        "OpenDembow",
+        options,
+        Box::new(|cc| Ok(Box::new(App::new(cc)))),
+    )
 }
 
 /// What the mouse is currently dragging.
 #[derive(Clone, Copy, PartialEq)]
 enum Drag {
     None,
-    Clip { t: usize, c: usize, grab: f64 },
-    NoteMove { idx: usize, grab_beat: f64, grab_key: i32 },
-    NoteResize { idx: usize },
+    Clip {
+        t: usize,
+        c: usize,
+        grab: f64,
+    },
+    NoteMove {
+        idx: usize,
+        grab_beat: f64,
+        grab_key: i32,
+    },
+    NoteResize {
+        idx: usize,
+    },
     /// Drag the left edge of a note (its end stays fixed).
-    NoteResizeL { idx: usize, end: f64 },
+    NoteResizeL {
+        idx: usize,
+        end: f64,
+    },
     /// Drag the left / right edge of a clip.
-    ClipEdge { t: usize, c: usize, left: bool },
+    ClipEdge {
+        t: usize,
+        c: usize,
+        left: bool,
+    },
 }
 
 /// Tab shown in the bottom panel.
@@ -158,12 +181,17 @@ impl App {
         theme::apply(&cc.egui_ctx);
         let project = Project::demo(engine::device_sr());
         let engine = Engine::new(project.clone());
-        let mcp = if std::env::args().any(|a| a == "--mcp") { Some(mcp::start(cc.egui_ctx.clone())) } else { None };
+        let mcp = if std::env::args().any(|a| a == "--mcp") {
+            Some(mcp::start(cc.egui_ctx.clone()))
+        } else {
+            None
+        };
         let status = engine.error.clone().unwrap_or_else(|| {
             if mcp.is_some() {
                 "MCP server active (stdio). An AI assistant can now control this project.".into()
             } else {
-                "Welcome to OpenDembow. Press Space to play, R to record, or press ? for help.".into()
+                "Welcome to OpenDembow. Press Space to play, R to record, or press ? for help."
+                    .into()
             }
         });
         let mut app = Self {
@@ -233,7 +261,12 @@ impl App {
         let nt = self.project.tracks.len();
         self.sel_track = self.sel_track.min(nt.saturating_sub(1));
         if let Some((t, c)) = self.sel_clip {
-            if self.project.tracks.get(t).map_or(true, |tr| c >= tr.clips.len()) {
+            if self
+                .project
+                .tracks
+                .get(t)
+                .map_or(true, |tr| c >= tr.clips.len())
+            {
                 self.sel_clip = None;
             }
         }
@@ -289,8 +322,15 @@ impl App {
     }
 
     fn fit_clip(&mut self, t: usize, c: usize) {
-        let end = self.notes_ref(t, c).map_or(0.0, |n| n.iter().map(|x| x.start + x.len).fold(0.0, f64::max));
-        if let Some(clip) = self.project.tracks.get_mut(t).and_then(|tr| tr.clips.get_mut(c)) {
+        let end = self.notes_ref(t, c).map_or(0.0, |n| {
+            n.iter().map(|x| x.start + x.len).fold(0.0, f64::max)
+        });
+        if let Some(clip) = self
+            .project
+            .tracks
+            .get_mut(t)
+            .and_then(|tr| tr.clips.get_mut(c))
+        {
             clip.len = clip.len.max((end / 4.0).ceil() * 4.0);
         }
     }
@@ -317,23 +357,36 @@ impl App {
     fn add_track(&mut self, inst: Instrument) {
         self.checkpoint();
         let color = self.project.tracks.len() % 8;
-        self.project.tracks.push(Track::new(inst.name(), TrackKind::Instrument(inst), color));
+        self.project
+            .tracks
+            .push(Track::new(inst.name(), TrackKind::Instrument(inst), color));
         self.sel_track = self.project.tracks.len() - 1;
         self.sel_clip = None;
         self.sel_note = None;
         self.sel_notes.clear();
         self.push();
-        self.status = format!("Added track: {}. Double-click its lane to create a clip.", inst.name());
+        self.status = format!(
+            "Added track: {}. Double-click its lane to create a clip.",
+            inst.name()
+        );
     }
 
     fn import_audio(&mut self, path: PathBuf) {
         match audio_io::load_wav(&path, self.project.sr) {
             Ok(data) => {
                 self.checkpoint();
-                let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Audio".into());
+                let name = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Audio".into());
                 let color = self.project.tracks.len() % 8;
                 let mut tr = Track::new(&name, TrackKind::Audio, color);
-                tr.clips.push(Clip { name: name.clone(), start: self.pos_beats.floor(), len: 0.0, kind: ClipKind::Audio(std::sync::Arc::new(data)) });
+                tr.clips.push(Clip {
+                    name: name.clone(),
+                    start: self.pos_beats.floor(),
+                    len: 0.0,
+                    kind: ClipKind::Audio(std::sync::Arc::new(data)),
+                });
                 self.project.tracks.push(tr);
                 self.sel_track = self.project.tracks.len() - 1;
                 self.push();
@@ -344,7 +397,10 @@ impl App {
     }
 
     fn import_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new().add_filter("WAV audio", &["wav"]).pick_file() {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("WAV audio", &["wav"])
+            .pick_file()
+        {
             self.import_audio(p);
         }
     }
@@ -461,7 +517,16 @@ impl App {
                 }
                 _ => {}
             }
-            let egui::Event::Key { key, pressed, repeat, modifiers, .. } = e else { continue };
+            let egui::Event::Key {
+                key,
+                pressed,
+                repeat,
+                modifiers,
+                ..
+            } = e
+            else {
+                continue;
+            };
             if repeat {
                 continue;
             }
@@ -524,7 +589,11 @@ impl App {
                     }
                 }
                 Key::Z if modifiers.command => {
-                    if modifiers.shift { self.redo() } else { self.undo() }
+                    if modifiers.shift {
+                        self.redo()
+                    } else {
+                        self.undo()
+                    }
                 }
                 Key::Z => self.octave = (self.octave - 1).max(0),
                 Key::X => self.octave = (self.octave + 1).min(6),
@@ -547,7 +616,8 @@ impl eframe::App for App {
         self.playing = playing;
         self.pos_beats = pos as f64 / self.project.sr as f64 * self.project.bpm / 60.0;
         self.loop_tick(ctx);
-        self.metronome.update(playing, self.pos_beats, self.project.bpm);
+        self.metronome
+            .update(playing, self.pos_beats, self.project.bpm);
         let active = playing || meters.iter().any(|m| *m > 0.002);
         self.meters = meters;
         if active || !self.down.is_empty() {
@@ -562,13 +632,29 @@ impl eframe::App for App {
         }
         self.handle_input(ctx);
 
-        let bar = |y: f32| egui::Frame::none().fill(Color32::WHITE).inner_margin(egui::Margin::symmetric(18.0, y));
-        let strip = || egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 3.0));
-        egui::TopBottomPanel::top("menu").frame(bar(2.0)).show(ctx, |ui| self.ui_menu(ui));
-        egui::TopBottomPanel::top("top").frame(bar(10.0)).show(ctx, |ui| self.ui_top(ui));
+        let bar = |y: f32| {
+            egui::Frame::none()
+                .fill(Color32::WHITE)
+                .inner_margin(egui::Margin::symmetric(18.0, y))
+        };
+        let strip = || {
+            egui::Frame::none()
+                .fill(BG)
+                .inner_margin(egui::Margin::symmetric(14.0, 3.0))
+        };
+        egui::TopBottomPanel::top("menu")
+            .frame(bar(2.0))
+            .show(ctx, |ui| self.ui_menu(ui));
+        egui::TopBottomPanel::top("top")
+            .frame(bar(10.0))
+            .show(ctx, |ui| self.ui_top(ui));
         egui::TopBottomPanel::bottom("status")
             .exact_height(28.0)
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(18.0, 5.0)))
+            .frame(
+                egui::Frame::none()
+                    .fill(BG)
+                    .inner_margin(egui::Margin::symmetric(18.0, 5.0)),
+            )
             .show(ctx, |ui| {
                 ui.label(egui::RichText::new(&self.status).color(GREY).size(12.0));
             });
@@ -577,18 +663,39 @@ impl eframe::App for App {
         if self.show_keys {
             let r = egui::TopBottomPanel::bottom("keyboard")
                 .exact_height(150.0)
-                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 14.0, right: 14.0, top: 6.0, bottom: 8.0 }))
+                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin {
+                    left: 14.0,
+                    right: 14.0,
+                    top: 6.0,
+                    bottom: 8.0,
+                }))
                 .show(ctx, |ui| self.ui_keyboard(ui));
             let rc = r.response.rect;
-            if view::float_toggle(ctx, "eye_keys", pos2(rc.right() - 56.0, rc.top() - 14.0), view::Side::Bottom, true, "Hide keyboard (Ctrl+Shift+K)", true) {
+            if view::float_toggle(
+                ctx,
+                "eye_keys",
+                pos2(rc.right() - 56.0, rc.top() - 14.0),
+                view::Side::Bottom,
+                true,
+                "Hide keyboard (Ctrl+Shift+K)",
+                true,
+            ) {
                 self.show_keys = false;
             }
         } else {
-            egui::TopBottomPanel::bottom("keyboard_collapsed").exact_height(30.0).frame(strip()).show(ctx, |ui| {
-                if view::collapsed_strip(ui, view::Side::Bottom, "Keyboard", "Show keyboard (Ctrl+Shift+K)") {
-                    self.show_keys = true;
-                }
-            });
+            egui::TopBottomPanel::bottom("keyboard_collapsed")
+                .exact_height(30.0)
+                .frame(strip())
+                .show(ctx, |ui| {
+                    if view::collapsed_strip(
+                        ui,
+                        view::Side::Bottom,
+                        "Keyboard",
+                        "Show keyboard (Ctrl+Shift+K)",
+                    ) {
+                        self.show_keys = true;
+                    }
+                });
         }
 
         // ---- instrument browser (or its collapsed rail) ----
@@ -596,19 +703,36 @@ impl eframe::App for App {
             let r = egui::SidePanel::left("browser")
                 .exact_width(300.0)
                 .resizable(false)
-                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(14.0, 14.0)))
+                .frame(
+                    egui::Frame::none()
+                        .fill(BG)
+                        .inner_margin(egui::Margin::symmetric(14.0, 14.0)),
+                )
                 .show(ctx, |ui| self.ui_browser(ui));
             let rc = r.response.rect;
-            if view::float_toggle(ctx, "eye_browser", pos2(rc.right() - 56.0, rc.top() + 27.0), view::Side::Left, true, "Hide instruments (Ctrl+B)", false) {
+            if view::float_toggle(
+                ctx,
+                "eye_browser",
+                pos2(rc.right() - 56.0, rc.top() + 27.0),
+                view::Side::Left,
+                true,
+                "Hide instruments (Ctrl+B)",
+                false,
+            ) {
                 self.show_browser = false;
             }
         } else {
             egui::SidePanel::left("browser_collapsed")
                 .exact_width(48.0)
                 .resizable(false)
-                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::symmetric(9.0, 16.0)))
+                .frame(
+                    egui::Frame::none()
+                        .fill(BG)
+                        .inner_margin(egui::Margin::symmetric(9.0, 16.0)),
+                )
                 .show(ctx, |ui| {
-                    if view::panel_button(ui, view::Side::Left, false, "Show instruments (Ctrl+B)") {
+                    if view::panel_button(ui, view::Side::Left, false, "Show instruments (Ctrl+B)")
+                    {
                         self.show_browser = true;
                     }
                 });
@@ -618,22 +742,48 @@ impl eframe::App for App {
         if self.show_detail {
             let r = egui::TopBottomPanel::bottom("detail")
                 .exact_height(285.0)
-                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 0.0, bottom: 10.0 }))
+                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin {
+                    left: 0.0,
+                    right: 14.0,
+                    top: 0.0,
+                    bottom: 10.0,
+                }))
                 .show(ctx, |ui| self.ui_detail(ui));
             let rc = r.response.rect;
-            if view::float_toggle(ctx, "eye_detail", pos2(rc.right() - 56.0, rc.top() - 14.0), view::Side::Bottom, true, "Hide piano roll & mixer (Ctrl+J)", true) {
+            if view::float_toggle(
+                ctx,
+                "eye_detail",
+                pos2(rc.right() - 56.0, rc.top() - 14.0),
+                view::Side::Bottom,
+                true,
+                "Hide piano roll & mixer (Ctrl+J)",
+                true,
+            ) {
                 self.show_detail = false;
             }
         } else {
-            egui::TopBottomPanel::bottom("detail_collapsed").exact_height(30.0).frame(strip()).show(ctx, |ui| {
-                if view::collapsed_strip(ui, view::Side::Bottom, "Piano roll & Mixer", "Show piano roll & mixer (Ctrl+J)") {
-                    self.show_detail = true;
-                }
-            });
+            egui::TopBottomPanel::bottom("detail_collapsed")
+                .exact_height(30.0)
+                .frame(strip())
+                .show(ctx, |ui| {
+                    if view::collapsed_strip(
+                        ui,
+                        view::Side::Bottom,
+                        "Piano roll & Mixer",
+                        "Show piano roll & mixer (Ctrl+J)",
+                    ) {
+                        self.show_detail = true;
+                    }
+                });
         }
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin { left: 0.0, right: 14.0, top: 14.0, bottom: 10.0 }))
+            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin {
+                left: 0.0,
+                right: 14.0,
+                top: 14.0,
+                bottom: 10.0,
+            }))
             .show(ctx, |ui| self.ui_arrangement(ui));
         self.ui_help(ctx);
 

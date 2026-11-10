@@ -3,7 +3,7 @@
 //! Same contract as the voices inside `instruments.rs`: returns `(sample, attack_s, level)`;
 //! the caller applies velocity, attack and the release envelope.
 
-use crate::instruments::{saw, Instrument};
+use crate::instruments::{Instrument, saw};
 use std::f32::consts::TAU;
 
 fn lp_a(fc: f32, dt: f32) -> f32 {
@@ -11,7 +11,15 @@ fn lp_a(fc: f32, dt: f32) -> f32 {
 }
 
 /// `ph`, `lp`, `lp2` are the voice's own oscillator phases and filter memories.
-pub fn voice(inst: Instrument, f: f32, t: f32, dt: f32, ph: &mut [f32; 5], lp: &mut f32, lp2: &mut f32) -> (f32, f32, f32) {
+pub fn voice(
+    inst: Instrument,
+    f: f32,
+    t: f32,
+    dt: f32,
+    ph: &mut [f32; 5],
+    lp: &mut f32,
+    lp2: &mut f32,
+) -> (f32, f32, f32) {
     let dp = f * dt;
     match inst {
         // Sub sine with a short pitch drop on the attack, saturated, slow decay (reggaeton / trap).

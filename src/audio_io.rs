@@ -28,19 +28,31 @@ pub fn load_wav(path: &Path, target_sr: f32) -> Result<Vec<f32>, String> {
         hound::SampleFormat::Float => r.samples::<f32>().filter_map(Result::ok).collect(),
         hound::SampleFormat::Int => {
             let max = (1i64 << (spec.bits_per_sample - 1)) as f32;
-            r.samples::<i32>().filter_map(Result::ok).map(|s| s as f32 / max).collect()
+            r.samples::<i32>()
+                .filter_map(Result::ok)
+                .map(|s| s as f32 / max)
+                .collect()
         }
     };
-    let mono: Vec<f32> = raw.chunks(ch).map(|c| c.iter().sum::<f32>() / ch as f32).collect();
+    let mono: Vec<f32> = raw
+        .chunks(ch)
+        .map(|c| c.iter().sum::<f32>() / ch as f32)
+        .collect();
     Ok(resample(&mono, spec.sample_rate as f32, target_sr))
 }
 
 /// Saves interleaved stereo samples as 16-bit WAV.
 pub fn save_wav_stereo(path: &Path, data: &[f32], sr: u32) -> Result<(), String> {
-    let spec = hound::WavSpec { channels: 2, sample_rate: sr, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: sr,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
     let mut w = hound::WavWriter::create(path, spec).map_err(|e| e.to_string())?;
     for &s in data {
-        w.write_sample((s.clamp(-1.0, 1.0) * 32767.0) as i16).map_err(|e| e.to_string())?;
+        w.write_sample((s.clamp(-1.0, 1.0) * 32767.0) as i16)
+            .map_err(|e| e.to_string())?;
     }
     w.finalize().map_err(|e| e.to_string())
 }

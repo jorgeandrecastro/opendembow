@@ -1,7 +1,7 @@
 //! MIDI keyboard / controller input (midir). Events are queued and handled on the UI thread.
 
 use midir::{MidiInput, MidiInputConnection};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 pub enum MidiMsg {
     On(u8, f32),
@@ -32,7 +32,14 @@ impl MidiIn {
     /// Lists the devices and connects to the first one, if any.
     pub fn start(ctx: eframe::egui::Context) -> Self {
         let (tx, rx) = channel();
-        let mut m = Self { ctx, tx, rx, conn: None, ports: Vec::new(), current: None };
+        let mut m = Self {
+            ctx,
+            tx,
+            rx,
+            conn: None,
+            ports: Vec::new(),
+            current: None,
+        };
         m.refresh();
         if let Some(first) = m.ports.first().cloned() {
             let _ = m.connect(&first);
@@ -42,7 +49,12 @@ impl MidiIn {
 
     pub fn refresh(&mut self) {
         self.ports = MidiInput::new("OpenDembow list")
-            .map(|m| m.ports().iter().filter_map(|p| m.port_name(p).ok()).collect::<Vec<_>>())
+            .map(|m| {
+                m.ports()
+                    .iter()
+                    .filter_map(|p| m.port_name(p).ok())
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
     }
 
