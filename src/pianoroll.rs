@@ -7,16 +7,19 @@
 //! - Suppr/Retour arrière, Ctrl+D (dupliquer), Ctrl+U (quantifier), Échap
 //! - Flèches : ↑↓ demi-ton, Maj+↑↓ octave, ←→ pas de grille, Maj+←→ longueur
 //! - vélocité : badge « V » sur la note survolée / sélectionnée (voir velocity.rs)
+//! - pistes de batterie : lignes = pads nommés (36-59), un clic ajoute un coup
 
 use crate::project::*;
 use crate::theme::*;
 use crate::{App, Drag};
 use eframe::egui::{
-    self, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, RichText, CornerRadius, Sense, pos2,
+    self, Align2, Color32, CornerRadius, FontId, Key, Modifiers, Pos2, Rect, RichText, Sense, pos2,
     vec2,
 };
 
 const KEYS_W: f32 = 62.0;
+/// Colonne des pads sur une piste de batterie (plus large : noms complets).
+const PADS_W: f32 = 96.0;
 pub(crate) const ROW_H: f32 = 15.0;
 const MIN_LEN_FREE: f64 = 1.0 / 32.0;
 
@@ -179,6 +182,9 @@ impl App {
         };
         let title = self.project.tracks[t].clips[c].name.clone();
         let col = PALETTE[self.project.tracks[t].color % 8];
+        // piste de batterie : lignes = pads nommés (MIDI 36-59), pas de touches de piano
+        let drum = self.drum_map(t);
+        let (kmin, kmax): (i32, i32) = if drum.is_some() { (36, 59) } else { (0, 127) };
 
         // --- synchronisation de la sélection avec App::sel_note ---
         st.sel = self.sel_notes.clone();
@@ -194,36 +200,38 @@ impl App {
             ui.add_space(14.0);
             ui.label(RichText::new(title).strong());
 
-            // Scale selector
-            ui.add_space(10.0);
-            ui.label(RichText::new("Scale:").size(11.5).color(GREY));
-            egui::ComboBox::from_id_salt("scale_root_combo")
-                .width(42.0)
-                .selected_text(NOTE_NAMES[st.root as usize])
-                .show_ui(ui, |ui| {
-                    for (i, name) in NOTE_NAMES.iter().enumerate() {
-                        ui.selectable_value(&mut st.root, i as u8, *name);
-                    }
-                });
-            egui::ComboBox::from_id_salt("scale_type_combo")
-                .width(125.0)
-                .selected_text(st.scale.name())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut st.scale, Scale::All, Scale::All.name());
-                    ui.selectable_value(&mut st.scale, Scale::Major, Scale::Major.name());
-                    ui.selectable_value(&mut st.scale, Scale::Minor, Scale::Minor.name());
-                    ui.selectable_value(
-                        &mut st.scale,
-                        Scale::PentatonicMajor,
-                        Scale::PentatonicMajor.name(),
-                    );
-                    ui.selectable_value(
-                        &mut st.scale,
-                        Scale::PentatonicMinor,
-                        Scale::PentatonicMinor.name(),
-                    );
-                    ui.selectable_value(&mut st.scale, Scale::Blues, Scale::Blues.name());
-                });
+            // Scale selector (sans objet sur une batterie)
+            if drum.is_none() {
+                ui.add_space(10.0);
+                ui.label(RichText::new("Scale:").size(11.5).color(GREY));
+                egui::ComboBox::from_id_salt("scale_root_combo")
+                    .width(42.0)
+                    .selected_text(NOTE_NAMES[st.root as usize])
+                    .show_ui(ui, |ui| {
+                        for (i, name) in NOTE_NAMES.iter().enumerate() {
+                            ui.selectable_value(&mut st.root, i as u8, *name);
+                        }
+                    });
+                egui::ComboBox::from_id_salt("scale_type_combo")
+                    .width(125.0)
+                    .selected_text(st.scale.name())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut st.scale, Scale::All, Scale::All.name());
+                        ui.selectable_value(&mut st.scale, Scale::Major, Scale::Major.name());
+                        ui.selectable_value(&mut st.scale, Scale::Minor, Scale::Minor.name());
+                        ui.selectable_value(
+                            &mut st.scale,
+                            Scale::PentatonicMajor,
+                            Scale::PentatonicMajor.name(),
+                        );
+                        ui.selectable_value(
+                            &mut st.scale,
+                            Scale::PentatonicMinor,
+                            Scale::PentatonicMinor.name(),
+                        );
+                        ui.selectable_value(&mut st.scale, Scale::Blues, Scale::Blues.name());
+                    });
+            }
 
             ui.label(
                 RichText::new("Alt = sans magnétisme")
@@ -246,9 +254,11 @@ impl App {
         let full = Rect::from_min_max(pos2(full.left() + 14.0, full.top()), full.right_bottom());
         // la grille occupe toute la hauteur (la vélocité passe par le badge « V »)
         let rect = full;
-        let keys_r = Rect::from_min_size(rect.min, vec2(KEYS_W, rect.height()));
-        let grid = Rect::from_min_max(pos2(rect.left() + KEYS_W, rect.top()), rect.right_bottom());
+        let keys_w = if drum.is_some() { PADS_W } else { KEYS_W };
+        let keys_r = Rect::from_min_size(rect.min, vec2(keys_w, rect.height()));
+        let grid = Rect::from_min_max(pos2(rect.left() + keys_w, rect.top()), rect.right_bottom());
         let rows = ((rect.height() / ROW_H).floor() as i32).max(1);
+        let rows = if drum.is_some() { rows.min(24) } else { rows };
         let gr = ui.interact(grid, ui.scope_id().with("roll"), Sense::click_and_drag());
         let kr = ui.interact(keys_r, ui.scope_id().with("rollkeys"), Sense::click_and_drag());
 
@@ -266,7 +276,11 @@ impl App {
                 self.pr_top += (scroll.y / ROW_H).round() as i32;
             }
         }
-        self.pr_top = self.pr_top.clamp(rows - 1, 127);
+        // batterie : la fenêtre reste dans 36..=59 ; sinon 0..=127 comme avant
+        self.pr_top = self
+            .pr_top
+            .min(kmax)
+            .max((kmin + rows - 1).min(kmax));
         let (top, ppb, sx) = (self.pr_top, self.pr_ppb, self.pr_scroll);
         let gx = |b: f64| grid.left() + ((b - sx) as f32) * ppb;
         let beat_at = |x: f32| ((x - grid.left()) / ppb) as f64 + sx;
@@ -340,7 +354,7 @@ impl App {
                         self.audition(t, n.key);
                     }
                 } else if self.pen {
-                    let key = key_at(p.y).clamp(0, 127) as u8;
+                    let key = key_at(p.y).clamp(kmin, kmax) as u8;
                     let start = qf(beat_at(p.x)).max(0.0);
                     self.checkpoint();
                     if let Some(n) = self.notes_mut(t, c) {
@@ -422,7 +436,9 @@ impl App {
                                         .max()
                                         .unwrap_or(127);
                                     let ds = (want_start - pn.start).max(-min_s);
-                                    let dk = (want_key - pn.key as i32).clamp(-min_k, 127 - max_k);
+                                    let dk = (want_key - pn.key as i32)
+                                        .min(kmax - max_k)
+                                        .max(kmin - min_k);
                                     if ds != 0.0 || dk != 0 {
                                         for &i in &group {
                                             if let Some(n) = v.get_mut(i) {
@@ -531,10 +547,11 @@ impl App {
                             self.audition(t, k);
                         }
                     }
-                    None if self.pen || gr.double_clicked() => {
-                        let key = key_at(p.y).clamp(0, 127) as u8;
+                    // batterie : un simple clic sur une case vide ajoute un coup (comme un séquenceur)
+                    None if self.pen || gr.double_clicked() || drum.is_some() => {
+                        let key = key_at(p.y).clamp(kmin, kmax) as u8;
                         let start = qf(beat_at(p.x)).max(0.0);
-                        let len = self.last_len;
+                        let len = if drum.is_some() { g } else { self.last_len };
                         self.checkpoint();
                         if let Some(n) = self.notes_mut(t, c) {
                             n.push(Note {
@@ -587,7 +604,7 @@ impl App {
         }
         let hk = if kr.is_pointer_button_down_on() {
             kr.interact_pointer_pos()
-                .map(|p| key_at(p.y).clamp(0, 127) as u8)
+                .map(|p| key_at(p.y).clamp(kmin, kmax) as u8)
         } else {
             None
         };
@@ -631,12 +648,12 @@ impl App {
                 0
             };
             if semis != 0 && !sel.is_empty() {
-                // ne dépasse pas les bornes 0..127 en gardant les intervalles
+                // ne dépasse pas les bornes (0..127, ou 36..59 pour une batterie) en gardant les intervalles
                 let (lo, hi) = self.notes_ref(t, c).map_or((0, 127), |v| {
                     let ks = sel.iter().filter_map(|&i| v.get(i)).map(|n| n.key as i32);
                     (ks.clone().min().unwrap_or(0), ks.max().unwrap_or(127))
                 });
-                let d = semis.clamp(-lo, 127 - hi);
+                let d = semis.min(kmax - hi).max(kmin - lo);
                 if d != 0 {
                     self.roll_edit(t, c, &sel, |n| n.key = (n.key as i32 + d) as u8);
                     if let Some(k) = self
@@ -674,7 +691,8 @@ impl App {
         p.rect_stroke(full, 14.0, stroke(1.0, HAIR), egui::StrokeKind::Middle);
         let gp = ui.painter_at(grid);
         let kp = ui.painter_at(keys_r);
-        let drum = self.drum_map(t);
+        // la gamme n'existe pas sur une batterie
+        let scale = if drum.is_some() { Scale::All } else { st.scale };
 
         for r in 0..rows {
             let key = top - r;
@@ -682,13 +700,13 @@ impl App {
                 break;
             }
             let y = grid.top() + r as f32 * ROW_H;
-            let black = matches!(key % 12, 1 | 3 | 6 | 8 | 10);
-            let in_scale = is_in_scale(key as u8, st.scale, st.root);
+            let black = drum.is_none() && matches!(key % 12, 1 | 3 | 6 | 8 | 10);
+            let in_scale = is_in_scale(key as u8, scale, st.root);
 
             let row = Rect::from_min_size(pos2(grid.left(), y), vec2(grid.width(), ROW_H));
 
             // Background color logic: standard chromatic when "All", Ableton-style subtle green tint when a scale is selected
-            let bg_color = if st.scale != Scale::All {
+            let bg_color = if scale != Scale::All {
                 if in_scale {
                     if black {
                         Color32::from_rgb(230, 245, 235)
@@ -707,7 +725,7 @@ impl App {
             };
 
             gp.rect_filled(row, 0.0, bg_color);
-            let line = if key % 12 == 0 {
+            let line = if drum.is_none() && key % 12 == 0 {
                 Color32::from_rgb(214, 214, 220)
             } else {
                 Color32::from_rgb(240, 240, 244)
@@ -720,25 +738,38 @@ impl App {
                 stroke(1.0, line),
             );
 
+            // batterie : colonne de pads nommés au lieu des touches de piano
             if let Some(map) = drum {
-                if !(36..=59).contains(&key) {
-                    gp.rect_filled(row, 0.0, tint(INK, 6));
-                } else if let Some(nm) = crate::drum_names::name(map, key) {
-                    gp.text(
-                        pos2(grid.left() + 8.0, row.center().y),
-                        Align2::LEFT_CENTER,
-                        nm,
-                        FontId::proportional(10.5),
-                        GREY,
-                    );
-                }
+                let down = self.down.contains(&(key as u8));
+                let pad = Rect::from_min_size(pos2(keys_r.left(), y), vec2(keys_w, ROW_H));
+                kp.rect_filled(
+                    pad,
+                    0.0,
+                    if down {
+                        ACCENT
+                    } else {
+                        Color32::from_rgb(244, 244, 248)
+                    },
+                );
+                kp.line_segment(
+                    [pos2(pad.left(), pad.bottom()), pos2(pad.right(), pad.bottom())],
+                    stroke(1.0, Color32::WHITE),
+                );
+                kp.text(
+                    pos2(pad.left() + 8.0, pad.center().y),
+                    Align2::LEFT_CENTER,
+                    crate::drum_names::name(map, key).unwrap_or(""),
+                    FontId::proportional(10.5),
+                    if down { Color32::WHITE } else { INK },
+                );
+                continue;
             }
 
             // Key column (left side piano keys)
             let down = self.down.contains(&(key as u8));
-            let kr_row = Rect::from_min_size(pos2(keys_r.left(), y), vec2(KEYS_W, ROW_H));
+            let kr_row = Rect::from_min_size(pos2(keys_r.left(), y), vec2(keys_w, ROW_H));
 
-            let key_base_color = if st.scale != Scale::All && in_scale {
+            let key_base_color = if scale != Scale::All && in_scale {
                 if down {
                     ACCENT
                 } else {
@@ -754,10 +785,10 @@ impl App {
 
             if black {
                 kp.rect_filled(kr_row, 0.0, Color32::WHITE);
-                let bk = Rect::from_min_size(kr_row.min, vec2(KEYS_W * 0.68, ROW_H));
+                let bk = Rect::from_min_size(kr_row.min, vec2(keys_w * 0.68, ROW_H));
                 kp.rect_filled(bk, 0.0, key_base_color);
 
-                if st.scale != Scale::All {
+                if scale != Scale::All {
                     let full_label = format!(
                         "{}{}",
                         NOTE_NAMES[(key % 12) as usize],
@@ -786,7 +817,7 @@ impl App {
                     stroke(1.0, HAIR),
                 );
 
-                if st.scale != Scale::All {
+                if scale != Scale::All {
                     let full_label = format!(
                         "{}{}",
                         NOTE_NAMES[(key % 12) as usize],
@@ -869,7 +900,12 @@ impl App {
                 };
                 gp.rect_filled(r, CornerRadius::same(4), tint(col, alpha));
                 if selected {
-                    gp.rect_stroke(r, CornerRadius::same(4), stroke(1.5, INK), egui::StrokeKind::Middle);
+                    gp.rect_stroke(
+                        r,
+                        CornerRadius::same(4),
+                        stroke(1.5, INK),
+                        egui::StrokeKind::Middle,
+                    );
                 }
             }
         }

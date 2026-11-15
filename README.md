@@ -1,5 +1,5 @@
 
-# OpenDembow 0.12
+# OpenDembow 0.13
 
 ![OpenDembow Interface](images/image1.png)
 
@@ -8,6 +8,9 @@
 ![OpenDembow Interface](images/image2.png)
 
 ![OpenDembow Interface](images/image3.png)
+
+![OpenDembow Interface](images/image5.png)
+
 
 A modern, elegant digital audio workstation written in Rust. Clean light interface, one accent colour, rounded everything - a calmer layout where you can hide what you do not use, see what you hear, and loops that never slip.
 
@@ -37,6 +40,10 @@ rfd = "0.18"
 serde_json = "1.0.154"
 midir = "0.11"
 ```
+
+## What's new in 0.13
+
+- **Drum-focused piano roll:** Drum tracks now use a dedicated pad grid instead of piano keys, with named rows for each drum sound and a clearer visual layout for programming beats.
 
 ## What's new in 0.12
 
@@ -91,7 +98,7 @@ midir = "0.11"
 - **Hideable panels and Focus mode** (0.9): instruments, piano roll & mixer and keyboard can be hidden; View menu, panel icons and shortcuts.
 - **Recording with count-in** (0.7): press `R` or the red button, hear a 4-beat count-in, then play - the notes you play become a new MIDI clip (undo with Ctrl+Z).
 - **MIDI input** (0.7): plug in a MIDI keyboard or controller and pick it in Track > MIDI Input; it plays the selected track and records like the computer keyboard.
-- **Drum names in the piano roll** (0.7): on a drum track every row shows the name of its pad, following the map of the kit.
+- **Drum-focused piano roll** (0.13): drum tracks use a dedicated pad grid instead of piano keys, with each row named for its sound.
 - **Favourite instruments** (0.7): click the star on an instrument, then use the ★ Favourites filter in the browser; favourites are saved in `~/.opendembow_favorites`.
 - **Drums** (0.6): five kits - **Drum Kit**, **808 Kit**, **Trap Kit**, **Reggaeton Kit** (dembow) and **Latin Percussion** (congas, bongos, timbales, shakers).
 - **Instruments added in 0.6**: 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck.
@@ -146,7 +153,7 @@ Notes: the velocity of a MIDI controller is stored in the clip but not yet used 
 
 ## Piano roll
 
-Select a MIDI clip (or double-click an empty lane to create one) to edit its notes in the bottom panel.
+Select a MIDI clip (or double-click an empty lane to create one) to edit its notes in the bottom panel. On drum tracks, the piano roll switches to a dedicated grid of named drum-pad rows instead of piano keys, making each hit easy to identify.
 
 **Drawing and selecting**
 
@@ -187,7 +194,7 @@ Each track has a volume automation lane under its clips, with 0 / 50 / 100 % gui
 
 ## Drums
 
-Add a drum kit track (**Drum Kit**, **808 Kit**, **Trap Kit** or **Reggaeton Kit**) and play it with the on-screen keyboard, your computer keys or the piano roll.
+Add a drum kit track (**Drum Kit**, **808 Kit**, **Trap Kit** or **Reggaeton Kit**) and play it with the on-screen keyboard, your computer keys or the piano roll. In the piano roll, drum tracks show named pad rows in place of piano keys.
 
 Notes are folded into two octaves (MIDI 36-59), so every key of the keyboard plays a drum. The piano roll shows these names next to each row:
 
@@ -325,7 +332,7 @@ The piano roll's note selection and scale choice, the analyzer options (Hold / T
 
 ## Roadmap
 
-Next (0.12.x): automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout, LUFS and stereo correlation meters, waveforms with a dB scale.
+Next (0.13.x): automation of pan and effect parameters, MIDI velocity in the live sound, saving the panel layout, LUFS and stereo correlation meters, waveforms with a dB scale.
 
 Later: step sequencer, audio recording, quantization while recording, fold-to-scale in the piano roll, dark theme, a "Designer" synth with filter / envelopes / LFO, sample-based instruments, instrument preview on hover, drag-to-trim clip edges, send effects.
 
