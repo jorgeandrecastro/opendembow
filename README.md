@@ -30,19 +30,23 @@ These dependencies are used for audio output and MIDI input.
 Dependencies in `Cargo.toml`:
 
 ```toml
-eframe = "0.29"
-cpal = "0.15"
+eframe = "0.37"
+cpal = "0.18"
 hound = "3.5"
-rfd = "0.15"
-serde_json = "1"
+rfd = "0.18"
+serde_json = "1.0.154"
 midir = "0.11"
 ```
 
-Set `version = "0.12.0"` in `Cargo.toml`: the version number shown in the transport bar follows it.
-
 ## What's new in 0.12
 
-See the release notes for the changes introduced in OpenDembow 0.12.
+- **Dependency upgrades:** Migrated to the latest versions of project dependencies and Rust crates.
+- **Build fixes:** Fixed compilation errors and compatibility issues introduced by dependency updates.
+- **Code cleanup:** Resolved compiler warnings and improved overall code quality.
+- **CI/CD improvements:** Updated the GitHub Actions workflows to ensure reliable cross-platform builds on Linux, Windows, and macOS.
+- **Linux compatibility:** Switched the Linux CI build environment to Ubuntu 22.04 to ensure compatibility with older GNU C Library (glibc) versions, including Debian 13.
+- **Release workflow:** Improved automated release builds and artifact generation for all supported platforms.
+
 
 ## What's new in 0.11
 
