@@ -154,7 +154,7 @@ impl App {
         sy: f32,
         ppb: f32,
     ) {
-        let sid = egui::Id::new("automation_ui_state");
+        let sid = egui::Id::unique("automation_ui_state");
         let mut st: AutoUi = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
         let alt = ui.input(|i| i.modifiers.alt);
         let grid: f64 = if ppb >= 64.0 {
@@ -177,7 +177,7 @@ impl App {
                 continue;
             }
             let area = curve_area(s);
-            let resp = ui.interact(vis, ui.id().with(("auto", ti)), Sense::click_and_drag());
+            let resp = ui.interact(vis, ui.scope_id().with(("auto", ti)), Sense::click_and_drag());
             let pts: Vec<AutomationPoint> = lane_points(&self.project.tracks[ti]).to_vec();
             let near = |p: Pos2| -> Option<usize> {
                 pts.iter()
@@ -288,7 +288,7 @@ impl App {
     ) {
         let st: AutoUi = ui
             .ctx()
-            .data_mut(|d| d.get_temp(egui::Id::new("automation_ui_state")))
+            .data_mut(|d| d.get_temp(egui::Id::unique("automation_ui_state")))
             .unwrap_or_default();
         let bx = |b: f64| lanes.left() + ((b - sx) as f32) * ppb;
 

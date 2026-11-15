@@ -12,7 +12,7 @@ use crate::project::*;
 use crate::theme::*;
 use crate::{App, Drag};
 use eframe::egui::{
-    self, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, RichText, Rounding, Sense, pos2,
+    self, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, RichText, CornerRadius, Sense, pos2,
     vec2,
 };
 
@@ -159,7 +159,7 @@ impl App {
     }
 
     pub fn ui_roll(&mut self, ui: &mut egui::Ui) {
-        let sid = egui::Id::new("piano_roll_scale_state");
+        let sid = egui::Id::unique("piano_roll_scale_state");
         let mut st: RollState = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
 
         let Some((t, c)) = self.sel_midi() else {
@@ -167,7 +167,7 @@ impl App {
             let (rect, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
             let p = ui.painter_at(rect);
             p.rect_filled(rect, 14.0, Color32::WHITE);
-            p.rect_stroke(rect, 14.0, stroke(1.0, HAIR));
+            p.rect_stroke(rect, 14.0, stroke(1.0, HAIR), egui::StrokeKind::Middle);
             p.text(
                 rect.center(),
                 Align2::CENTER_CENTER,
@@ -249,12 +249,12 @@ impl App {
         let keys_r = Rect::from_min_size(rect.min, vec2(KEYS_W, rect.height()));
         let grid = Rect::from_min_max(pos2(rect.left() + KEYS_W, rect.top()), rect.right_bottom());
         let rows = ((rect.height() / ROW_H).floor() as i32).max(1);
-        let gr = ui.interact(grid, ui.id().with("roll"), Sense::click_and_drag());
-        let kr = ui.interact(keys_r, ui.id().with("rollkeys"), Sense::click_and_drag());
+        let gr = ui.interact(grid, ui.scope_id().with("roll"), Sense::click_and_drag());
+        let kr = ui.interact(keys_r, ui.scope_id().with("rollkeys"), Sense::click_and_drag());
 
         if gr.hovered() {
             let (zoom, scroll, hover) =
-                ui.input(|i| (i.zoom_delta(), i.raw_scroll_delta, i.pointer.hover_pos()));
+                ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
             if zoom != 1.0 {
                 if let Some(p) = hover {
                     let anchor = self.pr_scroll + ((p.x - grid.left()) / self.pr_ppb) as f64;
@@ -602,7 +602,7 @@ impl App {
         }
 
         // ------------------------------------------------------------ raccourcis clavier
-        if ui.rect_contains_pointer(full) && !ui.ctx().wants_keyboard_input() {
+        if ui.rect_contains_pointer(full) && !ui.ctx().egui_wants_keyboard_input() {
             let kc = |m: Modifiers, k: Key| ui.input_mut(|i| i.consume_key(m, k));
             let sel = st.sel.clone();
             let n_notes = self.notes_ref(t, c).map_or(0, |v| v.len());
@@ -671,7 +671,7 @@ impl App {
         // ------------------------------------------------------------ drawing
         let p = ui.painter_at(full);
         p.rect_filled(full, 14.0, Color32::WHITE);
-        p.rect_stroke(full, 14.0, stroke(1.0, HAIR));
+        p.rect_stroke(full, 14.0, stroke(1.0, HAIR), egui::StrokeKind::Middle);
         let gp = ui.painter_at(grid);
         let kp = ui.painter_at(keys_r);
         let drum = self.drum_map(t);
@@ -867,9 +867,9 @@ impl App {
                 } else {
                     (110.0 + n.vel * 145.0) as u8
                 };
-                gp.rect_filled(r, Rounding::same(4.0), tint(col, alpha));
+                gp.rect_filled(r, CornerRadius::same(4), tint(col, alpha));
                 if selected {
-                    gp.rect_stroke(r, Rounding::same(4.0), stroke(1.5, INK));
+                    gp.rect_stroke(r, CornerRadius::same(4), stroke(1.5, INK), egui::StrokeKind::Middle);
                 }
             }
         }
@@ -878,7 +878,7 @@ impl App {
         if let (Some(o), Some(cur)) = (st.marquee, ui.input(|i| i.pointer.interact_pos())) {
             let mr = Rect::from_two_pos(o, cur).intersect(grid);
             gp.rect_filled(mr, 0.0, tint(ACCENT, 35));
-            gp.rect_stroke(mr, 0.0, stroke(1.0, ACCENT));
+            gp.rect_stroke(mr, 0.0, stroke(1.0, ACCENT), egui::StrokeKind::Middle);
         }
 
         let hx = gx(self.pos_beats - clip.start);

@@ -9,7 +9,7 @@ use crate::App;
 use crate::pianoroll::ROW_H;
 use crate::project::*;
 use crate::theme::*;
-use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Rounding, Sense, pos2, vec2};
+use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, CornerRadius, Sense, pos2, vec2};
 
 const BADGE_W: f32 = 12.0;
 const BADGE_H: f32 = 12.0;
@@ -42,7 +42,7 @@ impl App {
         gx: &dyn Fn(f64) -> f32,
         col: Color32,
     ) {
-        let sid = egui::Id::new("piano_roll_velocity_state");
+        let sid = egui::Id::unique("piano_roll_velocity_state");
         let mut st: VelState = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
         let ptr = ui.input(|i| i.pointer.hover_pos());
         let painter = ui.painter_at(grid);
@@ -82,7 +82,7 @@ impl App {
             if r.right() < grid.left() || r.left() > grid.right() {
                 continue;
             }
-            let resp = ui.interact(r, ui.id().with(("vel_badge", i)), Sense::click());
+            let resp = ui.interact(r, ui.scope_id().with(("vel_badge", i)), Sense::click());
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 st.hover = Some(i);
@@ -99,15 +99,15 @@ impl App {
             // fond + remplissage proportionnel à la vélocité
             painter.rect_filled(
                 r,
-                Rounding::same(3.0),
+                CornerRadius::same(3),
                 if is_open { col } else { Color32::WHITE },
             );
             if !is_open {
                 let h = r.height() * n.vel.clamp(0.0, 1.0);
                 let fill = Rect::from_min_max(pos2(r.left(), r.bottom() - h), r.right_bottom());
-                painter.rect_filled(fill, Rounding::same(3.0), tint(col, 90));
+                painter.rect_filled(fill, CornerRadius::same(3), tint(col, 90));
             }
-            painter.rect_stroke(r, Rounding::same(3.0), stroke(1.0, col));
+            painter.rect_stroke(r, CornerRadius::same(3), stroke(1.0, col), egui::StrokeKind::Middle);
             painter.text(
                 r.center(),
                 Align2::CENTER_CENTER,
@@ -128,7 +128,7 @@ impl App {
                 .map_or(0.8, |n| n.vel);
             let before = (cur * 127.0).round().clamp(1.0, 127.0) as i32;
             let mut val = before;
-            let area = egui::Area::new(egui::Id::new("vel_popup"))
+            let area = egui::Area::new(egui::Id::unique("vel_popup"))
                 .fixed_pos(r.right_top() + vec2(4.0, 0.0))
                 .order(egui::Order::Foreground)
                 .show(ui.ctx(), |ui| {

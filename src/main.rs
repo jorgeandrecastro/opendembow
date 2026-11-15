@@ -482,11 +482,11 @@ impl App {
 
     fn handle_input(&mut self, ctx: &egui::Context) {
         let dropped = ctx.input(|i| i.raw.dropped_files.clone());
-        if let Some(p) = dropped.into_iter().find_map(|f| f.path) {
+        if let Some(p) = dropped.into_iter().next().map(|f| f.path().to_path_buf()) {
             self.import_audio(p);
         }
         // typing in a text field (search box, number entry) must not trigger shortcuts
-        if ctx.wants_keyboard_input() {
+        if ctx.egui_wants_keyboard_input() {
             return;
         }
         let events = ctx.input(|i| i.events.clone());
@@ -611,7 +611,8 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
         let (pos, playing, meters, _master) = self.engine.status();
         self.playing = playing;
         self.pos_beats = pos as f64 / self.project.sr as f64 * self.project.bpm / 60.0;
@@ -632,44 +633,44 @@ impl eframe::App for App {
         }
         self.handle_input(ctx);
 
-        let bar = |y: f32| {
-            egui::Frame::none()
+        let bar = |y: i8| {
+            egui::Frame::new()
                 .fill(Color32::WHITE)
-                .inner_margin(egui::Margin::symmetric(18.0, y))
+                .inner_margin(egui::Margin::symmetric(18, y))
         };
         let strip = || {
-            egui::Frame::none()
+            egui::Frame::new()
                 .fill(BG)
-                .inner_margin(egui::Margin::symmetric(14.0, 3.0))
+                .inner_margin(egui::Margin::symmetric(14, 3))
         };
-        egui::TopBottomPanel::top("menu")
-            .frame(bar(2.0))
-            .show(ctx, |ui| self.ui_menu(ui));
-        egui::TopBottomPanel::top("top")
-            .frame(bar(10.0))
-            .show(ctx, |ui| self.ui_top(ui));
-        egui::TopBottomPanel::bottom("status")
-            .exact_height(28.0)
+        egui::Panel::top("menu")
+            .frame(bar(2))
+            .show(ui, |ui| self.ui_menu(ui));
+        egui::Panel::top("top")
+            .frame(bar(10))
+            .show(ui, |ui| self.ui_top(ui));
+        egui::Panel::bottom("status")
+            .exact_size(28.0)
             .frame(
-                egui::Frame::none()
+                egui::Frame::new()
                     .fill(BG)
-                    .inner_margin(egui::Margin::symmetric(18.0, 5.0)),
+                    .inner_margin(egui::Margin::symmetric(18, 5)),
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.label(egui::RichText::new(&self.status).color(GREY).size(12.0));
             });
 
         // ---- on-screen keyboard (or its collapsed strip) ----
         if self.show_keys {
-            let r = egui::TopBottomPanel::bottom("keyboard")
-                .exact_height(150.0)
-                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin {
-                    left: 14.0,
-                    right: 14.0,
-                    top: 6.0,
-                    bottom: 8.0,
+            let r = egui::Panel::bottom("keyboard")
+                .exact_size(150.0)
+                .frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin {
+                    left: 14,
+                    right: 14,
+                    top: 6,
+                    bottom: 8,
                 }))
-                .show(ctx, |ui| self.ui_keyboard(ui));
+                .show(ui, |ui| self.ui_keyboard(ui));
             let rc = r.response.rect;
             if view::float_toggle(
                 ctx,
@@ -683,10 +684,10 @@ impl eframe::App for App {
                 self.show_keys = false;
             }
         } else {
-            egui::TopBottomPanel::bottom("keyboard_collapsed")
-                .exact_height(30.0)
+            egui::Panel::bottom("keyboard_collapsed")
+                .exact_size(30.0)
                 .frame(strip())
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     if view::collapsed_strip(
                         ui,
                         view::Side::Bottom,
@@ -700,15 +701,15 @@ impl eframe::App for App {
 
         // ---- instrument browser (or its collapsed rail) ----
         if self.show_browser {
-            let r = egui::SidePanel::left("browser")
-                .exact_width(300.0)
+            let r = egui::Panel::left("browser")
+                .exact_size(300.0)
                 .resizable(false)
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::new()
                         .fill(BG)
-                        .inner_margin(egui::Margin::symmetric(14.0, 14.0)),
+                        .inner_margin(egui::Margin::symmetric(14, 14)),
                 )
-                .show(ctx, |ui| self.ui_browser(ui));
+                .show(ui, |ui| self.ui_browser(ui));
             let rc = r.response.rect;
             if view::float_toggle(
                 ctx,
@@ -722,15 +723,15 @@ impl eframe::App for App {
                 self.show_browser = false;
             }
         } else {
-            egui::SidePanel::left("browser_collapsed")
-                .exact_width(48.0)
+            egui::Panel::left("browser_collapsed")
+                .exact_size(48.0)
                 .resizable(false)
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::new()
                         .fill(BG)
-                        .inner_margin(egui::Margin::symmetric(9.0, 16.0)),
+                        .inner_margin(egui::Margin::symmetric(9, 16)),
                 )
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     if view::panel_button(ui, view::Side::Left, false, "Show instruments (Ctrl+B)")
                     {
                         self.show_browser = true;
@@ -740,15 +741,15 @@ impl eframe::App for App {
 
         // ---- piano roll & mixer (or its collapsed strip) ----
         if self.show_detail {
-            let r = egui::TopBottomPanel::bottom("detail")
-                .exact_height(285.0)
-                .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin {
-                    left: 0.0,
-                    right: 14.0,
-                    top: 0.0,
-                    bottom: 10.0,
+            let r = egui::Panel::bottom("detail")
+                .exact_size(285.0)
+                .frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin {
+                    left: 0,
+                    right: 14,
+                    top: 0,
+                    bottom: 10,
                 }))
-                .show(ctx, |ui| self.ui_detail(ui));
+                .show(ui, |ui| self.ui_detail(ui));
             let rc = r.response.rect;
             if view::float_toggle(
                 ctx,
@@ -762,10 +763,10 @@ impl eframe::App for App {
                 self.show_detail = false;
             }
         } else {
-            egui::TopBottomPanel::bottom("detail_collapsed")
-                .exact_height(30.0)
+            egui::Panel::bottom("detail_collapsed")
+                .exact_size(30.0)
                 .frame(strip())
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     if view::collapsed_strip(
                         ui,
                         view::Side::Bottom,
@@ -778,13 +779,13 @@ impl eframe::App for App {
         }
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin {
-                left: 0.0,
-                right: 14.0,
-                top: 14.0,
-                bottom: 10.0,
+            .frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin {
+                left: 0,
+                right: 14,
+                top: 14,
+                bottom: 10,
             }))
-            .show(ctx, |ui| self.ui_arrangement(ui));
+            .show(ui, |ui| self.ui_arrangement(ui));
         self.ui_help(ctx);
 
         // dragging an instrument from the browser: ghost + drop

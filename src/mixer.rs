@@ -7,7 +7,7 @@ use crate::curves;
 use crate::effects::FxSettings;
 use crate::theme::*;
 use eframe::egui::{
-    self, Align2, Color32, FontId, Pos2, RichText, Rounding, Sense, Shape, pos2, vec2,
+    self, Align2, Color32, FontId, Pos2, RichText, CornerRadius, Sense, Shape, pos2, vec2,
 };
 use std::f32::consts::PI;
 
@@ -114,11 +114,11 @@ fn fx_card(
     body: impl FnOnce(&mut egui::Ui) -> bool,
 ) -> (bool, bool) {
     let (mut toggled, mut changed) = (false, false);
-    egui::Frame::none()
+    egui::Frame::new()
         .fill(Color32::WHITE)
-        .rounding(Rounding::same(12.0))
+        .corner_radius(CornerRadius::same(12))
         .stroke(stroke(1.0, if on { col } else { HAIR }))
-        .inner_margin(egui::Margin::same(10.0))
+        .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
@@ -133,7 +133,7 @@ fn fx_card(
                             Color32::from_rgb(240, 240, 245)
                         })
                         .stroke(egui::Stroke::NONE)
-                        .rounding(Rounding::same(8.0))
+                        .corner_radius(CornerRadius::same(8))
                         .min_size(vec2(34.0, 18.0));
                     if ui.add(b).clicked() {
                         toggled = true;
@@ -212,14 +212,14 @@ impl App {
         let (mut changed, mut select) = (false, false);
         let soft = Color32::from_rgb(240, 240, 245);
 
-        egui::Frame::none()
+        egui::Frame::new()
             .fill(Color32::WHITE)
-            .rounding(Rounding::same(12.0))
+            .corner_radius(CornerRadius::same(12))
             .stroke(stroke(
                 if selected { 1.5 } else { 1.0 },
                 if selected { ACCENT } else { HAIR },
             ))
-            .inner_margin(egui::Margin::same(7.0))
+            .inner_margin(egui::Margin::same(7))
             .show(ui, |ui| {
                 ui.set_width(50.0);
                 ui.vertical_centered(|ui| {

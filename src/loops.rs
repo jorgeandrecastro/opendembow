@@ -17,7 +17,7 @@ use crate::App;
 use crate::project::LoopRegion;
 use crate::theme::*;
 use eframe::egui::{
-    self, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Rounding, Sense, pos2, vec2,
+    self, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, CornerRadius, Sense, pos2, vec2,
 };
 
 /// Hauteur de la barre de loop (au-dessus de la règle des mesures).
@@ -74,7 +74,7 @@ enum MenuAct {
 }
 
 fn sid() -> egui::Id {
-    egui::Id::new("loop_state")
+    egui::Id::unique("loop_state")
 }
 
 fn get(ctx: &egui::Context) -> LoopState {
@@ -184,7 +184,7 @@ impl App {
         } else {
             Color32::from_rgb(243, 243, 247)
         })
-        .rounding(Rounding::same(14.0))
+        .corner_radius(CornerRadius::same(14))
         .min_size(vec2(52.0, 28.0));
         if ui
             .add(b)
@@ -249,7 +249,7 @@ impl App {
             }
         };
 
-        let resp = ui.interact(zone, ui.id().with("loop_zone"), Sense::click_and_drag());
+        let resp = ui.interact(zone, ui.scope_id().with("loop_zone"), Sense::click_and_drag());
         let (x0, x1) = (bx(st.start), bx(st.end));
         let hw = 7.0f32.min(((x1 - x0) / 3.0).max(2.0));
         let hit = |p: Pos2| -> Mode {
@@ -349,7 +349,7 @@ impl App {
                 .clicked()
             {
                 act = Some(MenuAct::Toggle);
-                ui.close_menu();
+                ui.close();
             }
             if ui
                 .add_enabled(
@@ -359,7 +359,7 @@ impl App {
                 .clicked()
             {
                 act = Some(MenuAct::Clip);
-                ui.close_menu();
+                ui.close();
             }
             ui.separator();
             for n in [1u32, 2, 4, 8] {
@@ -370,7 +370,7 @@ impl App {
                 };
                 if ui.button(label).clicked() {
                     act = Some(MenuAct::Bars(n));
-                    ui.close_menu();
+                    ui.close();
                 }
             }
         });
@@ -396,11 +396,11 @@ impl App {
         let p = ui.painter_at(zone);
         p.rect_filled(
             zone,
-            Rounding {
-                nw: 0.0,
-                ne: 14.0,
-                sw: 0.0,
-                se: 0.0,
+            CornerRadius {
+                nw: 0,
+                ne: 14,
+                sw: 0,
+                se: 0,
             },
             Color32::from_rgb(248, 248, 251),
         );
@@ -416,7 +416,7 @@ impl App {
                 pos2(x1.min(zone.right()), zone.bottom() - 3.0),
             );
             p.rect_filled(r, 4.0, tint(col, if st.on { 90 } else { 60 }));
-            p.rect_stroke(r, 4.0, stroke(1.2, col));
+            p.rect_stroke(r, 4.0, stroke(1.2, col), egui::StrokeKind::Middle);
             // poignées aux deux bouts
             if x0 >= zone.left() {
                 p.rect_filled(Rect::from_min_size(r.min, vec2(5.0, r.height())), 3.0, col);

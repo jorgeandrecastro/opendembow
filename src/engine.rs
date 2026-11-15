@@ -257,7 +257,7 @@ pub fn device_sr() -> f32 {
     cpal::default_host()
         .default_output_device()
         .and_then(|d| d.default_output_config().ok())
-        .map(|c| c.sample_rate().0 as f32)
+        .map(|c| c.sample_rate() as f32)
         .unwrap_or(44100.0)
 }
 
@@ -297,11 +297,11 @@ impl Engine {
         if cfg.sample_format() != cpal::SampleFormat::F32 {
             return Err("Unsupported audio format (f32 required)".into());
         }
-        tap.set_sr(cfg.sample_rate().0 as f32);
+        tap.set_sr(cfg.sample_rate() as f32);
         let channels = cfg.channels() as usize;
         let stream = dev
             .build_output_stream(
-                &cfg.into(),
+                cfg.into(),
                 move |data: &mut [f32], _| {
                     let mut g = shared.lock().unwrap();
                     let s = &mut *g;

@@ -7,7 +7,7 @@
 use crate::theme::{ACCENT, GREY};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
-use eframe::egui::{self, Color32, RichText, Rounding, Sense, Shape, Stroke, pos2, vec2};
+use eframe::egui::{self, Color32, RichText, CornerRadius, Sense, Shape, Stroke, pos2, vec2};
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
@@ -48,7 +48,7 @@ fn build_stream<T>(
 where
     T: SizedSample + FromSample<f32>,
 {
-    let sr = config.sample_rate.0 as f32;
+    let sr = config.sample_rate as f32;
     let channels = (config.channels as usize).max(1);
 
     let mut beat = 0.0f64;
@@ -60,7 +60,7 @@ where
 
     device
         .build_output_stream(
-            config,
+            *config,
             move |data: &mut [T], _| {
                 // the UI asked us to jump to a new position
                 let generation = shared.generation.load(Relaxed);
@@ -229,7 +229,7 @@ impl Metronome {
             Color32::from_rgb(238, 238, 243)
         };
         let fg = if on { Color32::WHITE } else { GREY };
-        p.rect_filled(rect, Rounding::same(18.0), fill);
+        p.rect_filled(rect, CornerRadius::same(18), fill);
 
         // metronome icon: body + swinging pendulum
         let c = rect.center();

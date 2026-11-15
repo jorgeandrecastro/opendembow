@@ -5,7 +5,7 @@
 
 use crate::App;
 use crate::theme::*;
-use eframe::egui::{self, Color32, Painter, Pos2, Rect, RichText, Rounding, Sense, pos2, vec2};
+use eframe::egui::{self, Color32, Painter, Pos2, Rect, RichText, CornerRadius, Sense, pos2, vec2};
 
 /// Which side of the window the panel lives on (drives the glyph).
 #[derive(Clone, Copy, PartialEq)]
@@ -27,7 +27,7 @@ fn paint_glyph(p: &Painter, rect: Rect, side: Side, open: bool, hover: bool) {
         GREY
     };
     let r = Rect::from_center_size(rect.center(), vec2(16.0, 12.0));
-    p.rect_stroke(r, 3.0, stroke(1.5, col));
+    p.rect_stroke(r, 3.0, stroke(1.5, col), egui::StrokeKind::Middle);
     match side {
         Side::Left => {
             let x = r.left() + 5.5;
@@ -35,11 +35,11 @@ fn paint_glyph(p: &Painter, rect: Rect, side: Side, open: bool, hover: bool) {
                 let fill = Rect::from_min_max(r.min + vec2(0.75, 0.75), pos2(x, r.bottom() - 0.75));
                 p.rect_filled(
                     fill,
-                    Rounding {
-                        nw: 2.0,
-                        sw: 2.0,
-                        ne: 0.0,
-                        se: 0.0,
+                    CornerRadius {
+                        nw: 2,
+                        sw: 2,
+                        ne: 0,
+                        se: 0,
                     },
                     col,
                 );
@@ -55,11 +55,11 @@ fn paint_glyph(p: &Painter, rect: Rect, side: Side, open: bool, hover: bool) {
                 let fill = Rect::from_min_max(pos2(r.left() + 0.75, y), r.max - vec2(0.75, 0.75));
                 p.rect_filled(
                     fill,
-                    Rounding {
-                        nw: 0.0,
-                        ne: 0.0,
-                        sw: 2.0,
-                        se: 2.0,
+                    CornerRadius {
+                        nw: 0,
+                        ne: 0,
+                        sw: 2,
+                        se: 2,
                     },
                     col,
                 );
@@ -92,7 +92,7 @@ pub fn float_toggle(
     chip: bool,
 ) -> bool {
     let mut clicked = false;
-    egui::Area::new(egui::Id::new(id))
+    egui::Area::new(egui::Id::unique(id))
         .order(egui::Order::Foreground)
         .fixed_pos(pos)
         .show(ctx, |ui| {
@@ -155,13 +155,13 @@ impl App {
                 self.show_browser = false;
                 self.show_detail = false;
                 self.show_keys = false;
-                ui.close_menu();
+                ui.close();
             }
             if ui.button("Show everything").clicked() {
                 self.show_browser = true;
                 self.show_detail = true;
                 self.show_keys = true;
-                ui.close_menu();
+                ui.close();
             }
         });
     }

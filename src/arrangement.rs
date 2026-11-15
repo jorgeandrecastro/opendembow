@@ -7,7 +7,7 @@ use crate::project::*;
 use crate::theme::*;
 use crate::{App, Drag};
 use eframe::egui::{
-    self, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Rounding, Sense, pos2, vec2,
+    self, Align2, Color32, CursorIcon, FontId, Pos2, Rect, CornerRadius, Sense, pos2, vec2,
 };
 
 const HDR_W: f32 = 250.0;
@@ -176,13 +176,13 @@ impl App {
         self.arr_rect = rect;
         self.lanes_rect = lanes;
 
-        let lr = ui.interact(lanes, ui.id().with("lanes"), Sense::click_and_drag());
-        let rr = ui.interact(ruler, ui.id().with("ruler"), Sense::click_and_drag());
+        let lr = ui.interact(lanes, ui.scope_id().with("lanes"), Sense::click_and_drag());
+        let rr = ui.interact(ruler, ui.scope_id().with("ruler"), Sense::click_and_drag());
 
         // zoom (pinch / Ctrl+wheel) and scroll (aussi au-dessus des bandes d'automation)
         if ui.rect_contains_pointer(lanes) || rr.hovered() {
             let (zoom, scroll, hover) =
-                ui.input(|i| (i.zoom_delta(), i.raw_scroll_delta, i.pointer.hover_pos()));
+                ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
             if zoom != 1.0 {
                 if let Some(p) = hover {
                     let anchor = self.scroll_x + ((p.x - lanes.left()) / self.ppb) as f64;
@@ -249,7 +249,7 @@ impl App {
         };
 
         // ---- curseur rouge (playhead) : saisissable à la main, dans la règle comme dans les lanes ----
-        let scrub_id = egui::Id::new("playhead_scrub");
+        let scrub_id = egui::Id::unique("playhead_scrub");
         let ptr = ui.input(|i| i.pointer.hover_pos());
         let hx0 = bx(self.pos_beats);
         let head_hover = ptr.map_or(false, |h| {
@@ -452,7 +452,7 @@ impl App {
         // drawing
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 14.0, Color32::WHITE);
-        p.rect_stroke(rect, 14.0, stroke(1.0, HAIR));
+        p.rect_stroke(rect, 14.0, stroke(1.0, HAIR), egui::StrokeKind::Middle);
         let lp = ui.painter_at(lanes);
 
         for i in 0..nt {
@@ -578,16 +578,16 @@ impl App {
                 let cp = lp.with_clip_rect(cr.intersect(lanes));
                 cp.rect_filled(cr, 8.0, tint(col, if hov { 88 } else { 64 }));
                 if hov {
-                    cp.rect_stroke(cr, 8.0, stroke(1.0, tint(col, 150)));
+                    cp.rect_stroke(cr, 8.0, stroke(1.0, tint(col, 150)), egui::StrokeKind::Middle);
                 }
                 let hdr = Rect::from_min_size(cr.min, vec2(cr.width(), 18.0));
                 cp.rect_filled(
                     hdr,
-                    Rounding {
-                        nw: 8.0,
-                        ne: 8.0,
-                        sw: 0.0,
-                        se: 0.0,
+                    CornerRadius {
+                        nw: 8,
+                        ne: 8,
+                        sw: 0,
+                        se: 0,
                     },
                     col,
                 );
@@ -652,7 +652,7 @@ impl App {
                     }
                 }
                 if self.sel_clip == Some((ti, ci)) {
-                    cp.rect_stroke(cr, 8.0, stroke(2.0, INK));
+                    cp.rect_stroke(cr, 8.0, stroke(2.0, INK), egui::StrokeKind::Middle);
                     for gx in [cr.left() + 3.5, cr.right() - 3.5] {
                         cp.rect_filled(
                             Rect::from_center_size(pos2(gx, cr.center().y + 8.0), vec2(3.0, 20.0)),
@@ -665,7 +665,7 @@ impl App {
         }
 
         // track headers : dessinés même à moitié visibles (rognés), pour qu'aucune piste ne reste « fantôme »
-        let reorder_id = egui::Id::new("track_reorder");
+        let reorder_id = egui::Id::unique("track_reorder");
         let reorder_from: Option<usize> = ui
             .ctx()
             .data_mut(|d| d.get_temp::<Option<usize>>(reorder_id))
@@ -687,7 +687,7 @@ impl App {
                 vec2(HDR_W - 16.0, TRACK_H - 10.0),
             );
             let col = PALETTE[t.color % 8];
-            let hresp = ui.interact(hr, ui.id().with(("hdr", i)), Sense::click_and_drag());
+            let hresp = ui.interact(hr, ui.scope_id().with(("hdr", i)), Sense::click_and_drag());
             if hresp.clicked() {
                 acts.push(Act::Select(i));
             }
@@ -702,14 +702,14 @@ impl App {
             hresp.context_menu(|ui| {
                 if ui.button("Delete track").clicked() {
                     acts.push(Act::Delete(i));
-                    ui.close_menu();
+                    ui.close();
                 }
                 if let TrackKind::Instrument(_) = t.kind {
                     ui.menu_button("Change instrument", |ui| {
                         for inst in Instrument::ALL {
                             if ui.button(inst.name()).clicked() {
                                 acts.push(Act::Inst(i, inst));
-                                ui.close_menu();
+                                ui.close();
                             }
                         }
                     });
@@ -728,8 +728,7 @@ impl App {
             hp.rect_stroke(
                 hr,
                 12.0,
-                stroke(if sel { 1.5 } else { 1.0 }, if sel { ACCENT } else { HAIR }),
-            );
+                stroke(if sel { 1.5 } else { 1.0 }, if sel { ACCENT } else { HAIR }), egui::StrokeKind::Middle);
             hp.rect_filled(
                 Rect::from_min_size(
                     pos2(hr.left() + 8.0, hr.top() + 10.0),
@@ -760,7 +759,7 @@ impl App {
             let s = m.translate(vec2(28.0, 0.0));
             if pill(
                 ui,
-                ui.id().with(("m", i)),
+                ui.scope_id().with(("m", i)),
                 m,
                 "M",
                 t.mute,
@@ -771,7 +770,7 @@ impl App {
             }
             if pill(
                 ui,
-                ui.id().with(("s", i)),
+                ui.scope_id().with(("s", i)),
                 s,
                 "S",
                 t.solo,
@@ -782,7 +781,7 @@ impl App {
             }
             let xr = Rect::from_min_size(pos2(hr.right() - 34.0, hr.top() + 7.0), vec2(22.0, 20.0));
             let xresp = ui
-                .interact(xr, ui.id().with(("x", i)), Sense::click())
+                .interact(xr, ui.scope_id().with(("x", i)), Sense::click())
                 .on_hover_text("Delete track (Ctrl+Z to undo)");
             if xresp.hovered() {
                 hp.rect_filled(xr, 6.0, tint(RED, 30));
@@ -810,7 +809,7 @@ impl App {
                 Rect::from_min_size(pos2(hr.left() + 20.0, hr.bottom() - 27.0), vec2(96.0, 18.0));
             if let Some(v) = fader(
                 ui,
-                ui.id().with(("v", i)),
+                ui.scope_id().with(("v", i)),
                 vr,
                 t.volume,
                 0.0,
@@ -827,7 +826,7 @@ impl App {
             );
             if let Some(v) = fader(
                 ui,
-                ui.id().with(("p", i)),
+                ui.scope_id().with(("p", i)),
                 pr,
                 t.pan,
                 -1.0,
@@ -869,7 +868,7 @@ impl App {
                     if let Some(t) = self.project.tracks.get(from) {
                         let gp = ui.ctx().layer_painter(egui::LayerId::new(
                             egui::Order::Foreground,
-                            egui::Id::new("track_drag_ghost"),
+                            egui::Id::unique("track_drag_ghost"),
                         ));
                         let r = Rect::from_min_size(h + vec2(14.0, 8.0), vec2(190.0, 40.0));
                         gp.rect_filled(
@@ -878,7 +877,7 @@ impl App {
                             Color32::from_black_alpha(28),
                         );
                         gp.rect_filled(r, 12.0, Color32::WHITE);
-                        gp.rect_stroke(r, 12.0, stroke(1.5, ACCENT));
+                        gp.rect_stroke(r, 12.0, stroke(1.5, ACCENT), egui::StrokeKind::Middle);
                         gp.rect_filled(
                             Rect::from_min_size(
                                 pos2(r.left() + 8.0, r.top() + 8.0),
@@ -971,7 +970,7 @@ impl App {
 
         // cible du dépôt pendant qu'on glisse un instrument depuis le navigateur
         if self.drag_inst.is_some() {
-            p.rect_stroke(rect, 14.0, stroke(2.0, ACCENT));
+            p.rect_stroke(rect, 14.0, stroke(2.0, ACCENT), egui::StrokeKind::Middle);
             if let Some(h) = ui.input(|i| i.pointer.latest_pos()) {
                 match self.drop_target(h) {
                     Some(DropAt::Replace(ti)) => {

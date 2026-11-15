@@ -169,10 +169,10 @@ impl App {
         let k = (el.floor() as u32).min(COUNT_IN_BEATS - 1);
         let frac = (el - k as f64).clamp(0.0, 1.0) as f32;
         let number = COUNT_IN_BEATS - k;
-        let screen = ctx.screen_rect();
+        let screen = ctx.content_rect();
         let mut cancel = false;
 
-        egui::Area::new(egui::Id::new("count_in_overlay"))
+        egui::Area::new(egui::Id::unique("count_in_overlay"))
             .order(egui::Order::Foreground)
             .fixed_pos(screen.min)
             .show(ctx, |ui| {

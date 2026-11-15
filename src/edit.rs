@@ -4,7 +4,7 @@ use crate::pianoroll::{SIZES, size_label};
 use crate::project::*;
 use crate::theme::*;
 use crate::{App, DetailTab};
-use eframe::egui::{self, Color32, RichText, Rounding, vec2};
+use eframe::egui::{self, Color32, RichText, CornerRadius, vec2};
 use std::sync::Arc;
 
 /// What Copy / Cut put in the clipboard.
@@ -146,13 +146,13 @@ impl App {
     /// Call once per frame: when the mouse is up, the next edit opens a new undo step.
     pub fn edit_begin_frame(&self, ctx: &egui::Context) {
         if !ctx.input(|i| i.pointer.any_down()) {
-            ctx.data_mut(|d| d.insert_temp(egui::Id::new("edit_undo_open"), false));
+            ctx.data_mut(|d| d.insert_temp(egui::Id::unique("edit_undo_open"), false));
         }
     }
 
     /// Create an undo step only once per drag.
     pub fn edit_checkpoint(&mut self, ctx: &egui::Context) {
-        let id = egui::Id::new("edit_undo_open");
+        let id = egui::Id::unique("edit_undo_open");
         let open: bool = ctx.data_mut(|d| d.get_temp(id)).unwrap_or(false);
         if !open {
             self.checkpoint();
@@ -480,7 +480,7 @@ impl App {
                 }))
                 .fill(if sel { ACCENT } else { soft })
                 .stroke(egui::Stroke::NONE)
-                .rounding(Rounding::same(12.0))
+                .corner_radius(CornerRadius::same(12))
                 .min_size(vec2(0.0, 24.0));
                 ui.add(b).clicked()
             };
@@ -610,7 +610,7 @@ fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str, enabled: bool) -> b
     }
     let clicked = ui.add_enabled(enabled, b).clicked();
     if clicked {
-        ui.close_menu();
+        ui.close();
     }
     clicked
 }

@@ -2,7 +2,7 @@
 
 use crate::App;
 use crate::theme::*;
-use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Rounding, Sense, pos2, vec2};
+use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, CornerRadius, Sense, pos2, vec2};
 
 const LETTERS: [&str; 15] = [
     "A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L",
@@ -90,18 +90,18 @@ impl App {
         for (r, m) in &wk {
             let on = self.down.contains(&(*m as u8));
             let rr = r.shrink2(vec2(0.5, 0.0));
-            let round = Rounding {
-                nw: 0.0,
-                ne: 0.0,
-                sw: 9.0,
-                se: 9.0,
+            let round = CornerRadius {
+                nw: 0,
+                ne: 0,
+                sw: 9,
+                se: 9,
             };
             p.rect_filled(
                 rr,
                 round,
                 if on { tint(ACCENT, 70) } else { Color32::WHITE },
             );
-            p.rect_stroke(rr, round, stroke(1.0, HAIR));
+            p.rect_stroke(rr, round, stroke(1.0, HAIR), egui::StrokeKind::Middle);
             if let Some(l) = letter(*m) {
                 p.text(
                     pos2(r.center().x, r.bottom() - 30.0),
@@ -125,11 +125,11 @@ impl App {
             let on = self.down.contains(&(*m as u8));
             p.rect_filled(
                 *r,
-                Rounding {
-                    nw: 0.0,
-                    ne: 0.0,
-                    sw: 5.0,
-                    se: 5.0,
+                CornerRadius {
+                    nw: 0,
+                    ne: 0,
+                    sw: 5,
+                    se: 5,
                 },
                 if on { ACCENT } else { INK },
             );

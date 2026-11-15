@@ -65,7 +65,7 @@ impl Default for Hold {
 struct Bank(HashMap<usize, Hold>);
 
 fn bank_id() -> egui::Id {
-    egui::Id::new("meter_bank")
+    egui::Id::unique("meter_bank")
 }
 
 /// Held peak of a slot, in dBFS (-120 = nothing yet).

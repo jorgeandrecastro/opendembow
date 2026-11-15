@@ -5,7 +5,7 @@
 use crate::meters;
 use crate::theme::*;
 use eframe::egui::{
-    self, Align2, Color32, FontId, Rect, RichText, Rounding, Sense, Vec2, pos2, vec2,
+    self, Align2, Color32, CornerRadius, FontId, Rect, RichText, Sense, Vec2, pos2, vec2,
 };
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::*};
@@ -412,16 +412,16 @@ fn peak_readout(ui: &mut egui::Ui, pk: f32) {
 
 /// "Master" card: spectrum + stereo dBFS meters, `w` x `h` pixels.
 pub fn master_panel(ui: &mut egui::Ui, tap: &Tap, w: f32, h: f32) {
-    let sid = egui::Id::new("spectrum_state");
+    let sid = egui::Id::unique("spectrum_state");
     let mut st: Spec = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
     let (pl, pr) = tap.take_peaks();
 
     ui.allocate_ui_with_layout(vec2(w, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-        egui::Frame::none()
+        egui::Frame::new()
             .fill(Color32::WHITE)
-            .rounding(Rounding::same(12.0))
+            .corner_radius(CornerRadius::same(12))
             .stroke(stroke(1.0, HAIR))
-            .inner_margin(egui::Margin::same(10.0))
+            .inner_margin(egui::Margin::same(10))
             .show(ui, |ui| {
                 ui.set_width(w - 22.0);
                 ui.set_min_height(h - 22.0);

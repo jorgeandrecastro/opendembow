@@ -6,7 +6,7 @@ use crate::project::TrackKind;
 use crate::theme::*;
 use crate::{App, DetailTab};
 use eframe::egui::{
-    self, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, Rounding, Sense, Shape, pos2,
+    self, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, CornerRadius, Sense, Shape, pos2,
     vec2,
 };
 use std::f32::consts::TAU;
@@ -107,7 +107,7 @@ fn draw_glyph(p: &Painter, r: Rect, cat: Category, col: Color32) {
         Category::Drums => {
             // a drum body with two crossed sticks above it
             let body = Rect::from_center_size(pos2(c.x, c.y + h * 0.18), vec2(w, h * 0.62));
-            p.rect_stroke(body, 4.0, st);
+            p.rect_stroke(body, 4.0, st, egui::StrokeKind::Middle);
             p.line_segment(
                 [
                     pos2(c.x - w * 0.35, c.y - h * 0.55),
@@ -168,7 +168,7 @@ pub fn draw_ghost(ctx: &egui::Context, inst: Instrument) {
     if let Some(p) = ctx.pointer_latest_pos() {
         let painter = ctx.layer_painter(egui::LayerId::new(
             egui::Order::Tooltip,
-            egui::Id::new("ghost"),
+            egui::Id::unique("ghost"),
         ));
         let r = Rect::from_min_size(p + vec2(16.0, 12.0), vec2(200.0, 48.0));
         painter.rect_filled(
@@ -177,7 +177,7 @@ pub fn draw_ghost(ctx: &egui::Context, inst: Instrument) {
             Color32::from_black_alpha(30),
         );
         painter.rect_filled(r, 14.0, Color32::WHITE);
-        painter.rect_stroke(r, 14.0, stroke(1.5, ACCENT));
+        painter.rect_stroke(r, 14.0, stroke(1.5, ACCENT), egui::StrokeKind::Middle);
         let tile = Rect::from_min_size(pos2(r.left() + 7.0, r.center().y - 17.0), vec2(34.0, 34.0));
         draw_tile(&painter, tile, inst);
         painter.text(
@@ -242,29 +242,29 @@ pub fn app_icon() -> egui::IconData {
 
 impl App {
     pub fn ui_menu(&mut self, ui: &mut egui::Ui) {
-        egui::menu::bar(ui, |ui| {
+        egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("New Project").clicked() {
                     self.new_project(ui.ctx());
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add(egui::Button::new("Open Project…").shortcut_text("Ctrl+O"))
                     .clicked()
                 {
                     self.open_project_dialog(ui.ctx());
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add(egui::Button::new("Save Project").shortcut_text("Ctrl+S"))
                     .clicked()
                 {
                     self.save_project(ui.ctx(), false);
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Save Project As…").clicked() {
                     self.save_project(ui.ctx(), true);
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui
@@ -272,7 +272,7 @@ impl App {
                     .clicked()
                 {
                     self.import_dialog();
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui
@@ -280,15 +280,15 @@ impl App {
                     .clicked()
                 {
                     self.export_mixdown();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Export Stems (one WAV per track)…").clicked() {
                     self.export_stems();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Export MIDI…").clicked() {
                     self.export_midi_dialog();
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -300,7 +300,7 @@ impl App {
                     .clicked()
                 {
                     self.undo();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(
@@ -310,7 +310,7 @@ impl App {
                     .clicked()
                 {
                     self.redo();
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 let has_clip = self.sel_clip.is_some();
@@ -319,14 +319,14 @@ impl App {
                     .clicked()
                 {
                     self.cut_selection();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(has_clip, egui::Button::new("Copy").shortcut_text("Ctrl+C"))
                     .clicked()
                 {
                     self.copy_selection();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(
@@ -336,7 +336,7 @@ impl App {
                     .clicked()
                 {
                     self.paste_clipboard();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(
@@ -346,7 +346,7 @@ impl App {
                     .clicked()
                 {
                     self.duplicate_clip();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(
@@ -356,7 +356,7 @@ impl App {
                     .clicked()
                 {
                     self.delete_selected();
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui
@@ -367,7 +367,7 @@ impl App {
                     .clicked()
                 {
                     self.split_at_playhead();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(
@@ -377,7 +377,7 @@ impl App {
                     .clicked()
                 {
                     self.trim_start_to_playhead();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(
@@ -387,7 +387,7 @@ impl App {
                     .clicked()
                 {
                     self.trim_end_to_playhead();
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 let audio = self.sel_is_audio();
@@ -396,14 +396,14 @@ impl App {
                     .clicked()
                 {
                     self.audio_process(AudioOp::Normalize);
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui
                     .add_enabled(audio, egui::Button::new("Reverse Audio"))
                     .clicked()
                 {
                     self.audio_process(AudioOp::Reverse);
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("Track", |ui| {
@@ -417,7 +417,7 @@ impl App {
                             {
                                 if ui.button(inst.name()).clicked() {
                                     self.add_track(inst);
-                                    ui.close_menu();
+                                    ui.close();
                                 }
                             }
                         });
@@ -425,12 +425,12 @@ impl App {
                 });
                 if ui.button("Add Audio Track (WAV)…").clicked() {
                     self.import_dialog();
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Show Mixer & Effects").clicked() {
                     self.detail = DetailTab::Mixer;
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 // 0.7: recording options and MIDI input
@@ -450,7 +450,7 @@ impl App {
                                 Ok(()) => format!("MIDI input: {name}"),
                                 Err(e) => format!("MIDI error: {e}"),
                             };
-                            ui.close_menu();
+                            ui.close();
                         }
                     }
                 });
@@ -461,7 +461,7 @@ impl App {
                     .clicked()
                 {
                     self.delete_track(self.sel_track);
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             self.ui_view_menu(ui);
@@ -471,11 +471,11 @@ impl App {
                     .clicked()
                 {
                     self.show_help = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("About OpenDembow").clicked() {
                     self.show_help = true;
-                    ui.close_menu();
+                    ui.close();
                 }
             });
         });
@@ -488,7 +488,7 @@ impl App {
             ui.label(RichText::new(env!("CARGO_PKG_VERSION")).color(GREY));
             ui.add_space(20.0);
             let rw = egui::Button::new(RichText::new("⏮").size(16.0))
-                .rounding(Rounding::same(18.0))
+                .corner_radius(CornerRadius::same(18))
                 .min_size(vec2(40.0, 32.0));
             if ui.add(rw).clicked() {
                 self.rewind();
@@ -496,7 +496,7 @@ impl App {
             let icon = if self.playing { "⏸" } else { "⏵" };
             let play = egui::Button::new(RichText::new(icon).size(18.0).color(Color32::WHITE))
                 .fill(ACCENT)
-                .rounding(Rounding::same(18.0))
+                .corner_radius(CornerRadius::same(18))
                 .min_size(vec2(52.0, 32.0));
             if ui.add(play).clicked() {
                 self.engine.toggle_play();
@@ -513,7 +513,7 @@ impl App {
             } else {
                 Color32::from_rgb(243, 243, 247)
             })
-            .rounding(Rounding::same(18.0))
+            .corner_radius(CornerRadius::same(18))
             .min_size(vec2(40.0, 32.0));
             if ui
                 .add(rec)
@@ -554,7 +554,7 @@ impl App {
             ui.label(RichText::new(txt).monospace().size(16.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let help = egui::Button::new(RichText::new("?").size(15.0).strong())
-                    .rounding(Rounding::same(15.0))
+                    .corner_radius(CornerRadius::same(15))
                     .min_size(vec2(30.0, 30.0));
                 if ui
                     .add(help)
@@ -566,15 +566,15 @@ impl App {
                 ui.menu_button("Export", |ui| {
                     if ui.button("Mixdown (WAV)…").clicked() {
                         self.export_mixdown();
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("Stems (one WAV per track)…").clicked() {
                         self.export_stems();
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("MIDI file…").clicked() {
                         self.export_midi_dialog();
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
                 if ui.button("Save").clicked() {
@@ -596,7 +596,7 @@ impl App {
         let sresp = ui
             .interact(
                 Rect::from_center_size(star_c, vec2(22.0, 22.0)),
-                ui.id().with(("star", inst.name())),
+                ui.scope_id().with(("star", inst.name())),
                 Sense::click(),
             )
             .on_hover_text(if fav {
@@ -609,7 +609,7 @@ impl App {
         let presp = ui
             .interact(
                 Rect::from_center_size(plus_c, vec2(24.0, 24.0)),
-                ui.id().with(("plus", inst.name())),
+                ui.scope_id().with(("plus", inst.name())),
                 Sense::click(),
             )
             .on_hover_text("Add as a new track (or drag it onto the timeline)");
@@ -684,15 +684,15 @@ impl App {
     }
 
     pub fn ui_browser(&mut self, ui: &mut egui::Ui) {
-        let sid = egui::Id::new("instrument_browser_state");
+        let sid = egui::Id::unique("instrument_browser_state");
         let mut st: BrowserState = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
         let soft = Color32::from_rgb(240, 240, 245);
 
-        egui::Frame::none()
+        egui::Frame::new()
             .fill(Color32::WHITE)
-            .rounding(Rounding::same(14.0))
+            .corner_radius(CornerRadius::same(14))
             .stroke(stroke(1.0, HAIR))
-            .inner_margin(egui::Margin::same(12.0))
+            .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
                 ui.set_min_size(ui.available_size());
 
@@ -709,10 +709,10 @@ impl App {
                 ui.add_space(8.0);
 
                 // search pill
-                egui::Frame::none()
+                egui::Frame::new()
                     .fill(soft)
-                    .rounding(Rounding::same(10.0))
-                    .inner_margin(egui::Margin::symmetric(10.0, 6.0))
+                    .corner_radius(CornerRadius::same(10))
+                    .inner_margin(egui::Margin::symmetric(10, 6))
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.horizontal(|ui| {
@@ -721,7 +721,7 @@ impl App {
                             ui.add(
                                 egui::TextEdit::singleline(&mut st.query)
                                     .hint_text("Search")
-                                    .frame(false)
+                                    .frame(egui::Frame::NONE)
                                     .desired_width(w),
                             );
                             if !st.query.is_empty() && ui.small_button("×").clicked() {
@@ -740,7 +740,7 @@ impl App {
                     }))
                     .fill(if sel { ACCENT } else { soft })
                     .stroke(egui::Stroke::NONE)
-                    .rounding(Rounding::same(12.0))
+                    .corner_radius(CornerRadius::same(12))
                     .min_size(vec2(0.0, 24.0));
                     ui.add(b).clicked()
                 };
@@ -848,10 +848,10 @@ impl App {
                             } else {
                                 0.0
                             };
-                            let wheel = ui.ctx().input(|i| i.raw_scroll_delta.y);
+                            let wheel = ui.ctx().input(|i| i.smooth_scroll_delta.y);
                             let d = edge * 14.0 - wheel;
                             if d != 0.0 {
-                                st.force = Some((out.state.offset.y + d).max(0.0));
+                                st.force = Some((out.state.clamped_offset().y + d).max(0.0));
                             }
                         }
                     }
@@ -862,7 +862,7 @@ impl App {
                 let imp = egui::Button::new(RichText::new("Import WAV…").size(13.0).color(INK))
                     .fill(soft)
                     .stroke(egui::Stroke::NONE)
-                    .rounding(Rounding::same(10.0));
+                    .corner_radius(CornerRadius::same(10));
                 if ui.add_sized([ui.available_width(), 34.0], imp).clicked() {
                     self.import_dialog();
                 }

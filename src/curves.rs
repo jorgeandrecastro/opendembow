@@ -49,7 +49,7 @@ pub fn gain_reduction(ctx: &egui::Context, track: usize, comp: &CompFx, level_li
         }
         return v;
     }
-    let id = egui::Id::new(("gr_estimate", track));
+    let id = egui::Id::unique(("gr_estimate", track));
     let mut gr: f32 = ctx.data(|d| d.get_temp(id)).unwrap_or(0.0);
     if !comp.on {
         gr = 0.0;
@@ -142,7 +142,7 @@ pub fn eq_graph(
     if inner.width() < 60.0 || inner.height() < 40.0 {
         return false;
     }
-    let sid = egui::Id::new(("eq_ui", track));
+    let sid = egui::Id::unique(("eq_ui", track));
     let mut st: EqUi = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
     let sr = tap.sr().max(8000.0);
     let lr = (FMAX / FMIN).ln();
@@ -214,7 +214,7 @@ pub fn eq_graph(
     }
     let hot = st.drag.or_else(|| hover.and_then(|h| nearest(h, eq)));
     if hot == Some(1) && st.drag.is_none() {
-        let sc = ui.input(|i| i.raw_scroll_delta.y);
+        let sc = ui.input(|i| i.smooth_scroll_delta.y);
         if sc != 0.0 {
             eq.mid_q = (eq.mid_q * (sc * 0.004).exp()).clamp(0.3, 6.0);
             eq.on = true;
@@ -413,7 +413,7 @@ pub fn comp_graph(
     if inner.width() < 60.0 || inner.height() < 40.0 {
         return false;
     }
-    let sid = egui::Id::new(("comp_ui", track));
+    let sid = egui::Id::unique(("comp_ui", track));
     let mut st: CompUi = ui.ctx().data_mut(|d| d.get_temp(sid)).unwrap_or_default();
     let xin = |d: f32| inner.left() + (d - IN_MIN) / -IN_MIN * inner.width();
     let yout = |d: f32| {
