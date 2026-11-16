@@ -1,6 +1,7 @@
 //! Real-time mixer, audio output and offline bounce.
 
-use crate::analyzer::Tap;
+use crate::meter_bus::publish_gr;
+use crate::tap::Tap;
 use crate::effects::FxProcessor;
 use crate::instruments::{Instrument, Voice};
 use crate::project::*;
@@ -174,7 +175,7 @@ impl Mixer {
             let t = &p.tracks[ti];
             fx[ti].process_block(&t.fx, &mut tl[ti], &mut tr[ti]);
             // 0.11: exact gain reduction for the compressor meter (atomic store, no lock)
-            crate::curves::publish_gr(ti, fx[ti].gain_reduction_db());
+            publish_gr(ti, fx[ti].gain_reduction_db());
 
             if t.mute || (any_solo && !t.solo) {
                 peaks[ti] = 0.0;

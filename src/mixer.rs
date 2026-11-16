@@ -2,7 +2,7 @@
 //! of the selected track. The EQ and compressor cards show their curves (see `curves.rs`).
 
 use crate::App;
-use crate::analyzer::Tap;
+use opendembow_core::tap::Tap;
 use crate::curves;
 use crate::effects::FxSettings;
 use crate::theme::*;

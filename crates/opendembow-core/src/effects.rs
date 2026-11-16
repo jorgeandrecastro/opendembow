@@ -5,7 +5,7 @@
 //!
 //! ```ignore
 //! fx_proc[t].process_block(&project.tracks[t].fx, &mut left, &mut right);
-//! crate::curves::publish_gr(t, fx_proc[t].gain_reduction_db()); // 0.11: live gain-reduction meter
+//! crate::meter_bus::publish_gr(t, fx_proc[t].gain_reduction_db()); // live gain-reduction meter
 //! ```
 //!
 //! The Mixer & Effects panel lives in `mixer.rs`; the EQ / compressor curves in `curves.rs`.

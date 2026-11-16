@@ -1,4 +1,4 @@
-//! WAV import / export.
+//! WAV import / export helpers.
 
 use std::path::Path;
 

@@ -5,40 +5,15 @@
 //! Gain reduction: when the engine calls `publish_gr` after each `process_block` the meter shows the
 //! exact value. Until it does, the meter falls back to an estimate computed from the track level.
 
-use crate::analyzer::{self, Tap};
+use crate::analyzer;
 use crate::effects::{CompFx, EqFx, eq_response_db};
 use crate::meters::to_db;
 use crate::theme::*;
+use opendembow_core::meter_bus::live_gr;
+use opendembow_core::tap::Tap;
 use eframe::egui::{
     self, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2, pos2, vec2,
 };
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
-
-// ======================================================================
-// Gain-reduction bus (audio thread -> UI)
-// ======================================================================
-
-const MAX_TRACKS: usize = 128;
-#[allow(clippy::declare_interior_mutable_const)]
-const ZERO: AtomicU32 = AtomicU32::new(0);
-static GR: [AtomicU32; MAX_TRACKS] = [ZERO; MAX_TRACKS];
-static GR_LIVE: AtomicBool = AtomicBool::new(false);
-
-/// Called by the audio thread once per block: gain reduction of track `track`, in dB (>= 0).
-pub fn publish_gr(track: usize, db: f32) {
-    if let Some(s) = GR.get(track) {
-        s.store(db.max(0.0).to_bits(), Relaxed);
-        GR_LIVE.store(true, Relaxed);
-    }
-}
-
-fn live_gr(track: usize) -> Option<f32> {
-    if GR_LIVE.load(Relaxed) {
-        GR.get(track).map(|s| f32::from_bits(s.load(Relaxed)))
-    } else {
-        None
-    }
-}
 
 /// Gain reduction to show for a track: the engine's value when it publishes one,
 /// otherwise an estimate (static curve + attack / release) from the track level.

@@ -1,0 +1,14 @@
+[package]
+name = "opendembow-core"
+version = "0.13.0"
+edition = "2024"
+description = "Reusable audio engine, instruments, effects, and project format for OpenDembow."
+license = "GPL-3.0-or-later"
+repository = "https://github.com/jorgeandrecastro/opendembow"
+readme = "README.md"
+keywords = ["audio", "daw", "music", "synthesizer"]
+categories = ["multimedia::audio"]
+
+[dependencies]
+cpal = "0.18"
+hound = "3.5"

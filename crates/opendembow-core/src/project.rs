@@ -1,4 +1,4 @@
-//! The song: tracks, clips, notes.
+//! The reusable song model: tracks, clips, and notes.
 
 use crate::effects::FxSettings;
 use crate::instruments::Instrument;

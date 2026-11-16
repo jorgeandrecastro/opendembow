@@ -2,22 +2,14 @@
 
 mod analyzer;
 mod arrangement;
-mod audio_io;
 mod automation;
 mod chrome;
 mod curves;
 mod drum_names;
-mod drums;
-mod drums_urban;
 mod edit;
-mod effects;
-mod engine;
-mod extra_voices;
 mod favorites;
 mod files;
-mod instruments;
 mod keyboard;
-mod latin;
 mod loops;
 mod mcp;
 mod meters;
@@ -25,17 +17,15 @@ mod metronome;
 mod midi_in;
 mod mixer;
 mod pianoroll;
-mod project;
-mod project_io;
 mod record;
 mod theme;
 mod velocity;
 mod view;
 
 use eframe::egui::{self, Color32, Key, Rect, pos2};
-use engine::Engine;
-use instruments::Instrument;
-use project::*;
+pub(crate) use opendembow_core::{audio_io, effects, engine, instruments, project, project_io};
+use opendembow_core::{Engine, Instrument};
+use opendembow_core::project::*;
 use std::{collections::HashSet, path::PathBuf};
 use theme::*;
 

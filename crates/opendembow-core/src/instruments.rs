@@ -1,6 +1,7 @@
-//! Built-in instruments: 33 synthesized voices grouped in categories, no samples required.
+//! Built-in instruments: 58 synthesized voices grouped in categories, no samples required.
 //! Drum kits live in `drums.rs` and `drums_urban.rs`, percussion in `latin.rs`,
-//! the 0.6 melodic additions in `extra_voices.rs`.
+//! the 0.6 melodic additions in `extra_voices.rs`, the 0.13 additions (pianos and more)
+//! in `more_voices.rs`.
 
 use std::f32::consts::TAU;
 
@@ -48,6 +49,7 @@ impl Category {
 
 // NOTE: keep the first 8 variants (and their order in ALL) unchanged so that
 // projects saved with an older version still load the same instruments.
+// Projects store instruments by NAME, so a name must never be changed or reused.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Instrument {
     Piano,
@@ -85,10 +87,36 @@ pub enum Instrument {
     TrapKit,
     ReggaetonKit,
     LatinPerc,
+    // --- new in 0.13 (voices in more_voices.rs) ---
+    UprightPiano,
+    BrightPiano,
+    HonkyTonk,
+    FeltPiano,
+    ToyPiano,
+    Rhodes,
+    Wurlitzer,
+    FmPiano,
+    RockOrgan,
+    Accordion,
+    PwmLead,
+    SyncLead,
+    ReeseBass,
+    WobbleBass,
+    Banjo,
+    Kalimba,
+    Koto,
+    GlassPad,
+    AnalogPad,
+    Glockenspiel,
+    Xylophone,
+    SteelDrum,
+    Trumpet,
+    Saxophone,
+    Clarinet,
 }
 
 impl Instrument {
-    pub const ALL: [Instrument; 33] = [
+    pub const ALL: [Instrument; 58] = [
         Instrument::Piano,
         Instrument::ElectricPiano,
         Instrument::Organ,
@@ -122,6 +150,31 @@ impl Instrument {
         Instrument::TrapKit,
         Instrument::ReggaetonKit,
         Instrument::LatinPerc,
+        Instrument::UprightPiano,
+        Instrument::BrightPiano,
+        Instrument::HonkyTonk,
+        Instrument::FeltPiano,
+        Instrument::ToyPiano,
+        Instrument::Rhodes,
+        Instrument::Wurlitzer,
+        Instrument::FmPiano,
+        Instrument::RockOrgan,
+        Instrument::Accordion,
+        Instrument::PwmLead,
+        Instrument::SyncLead,
+        Instrument::ReeseBass,
+        Instrument::WobbleBass,
+        Instrument::Banjo,
+        Instrument::Kalimba,
+        Instrument::Koto,
+        Instrument::GlassPad,
+        Instrument::AnalogPad,
+        Instrument::Glockenspiel,
+        Instrument::Xylophone,
+        Instrument::SteelDrum,
+        Instrument::Trumpet,
+        Instrument::Saxophone,
+        Instrument::Clarinet,
     ];
 
     pub fn name(self) -> &'static str {
@@ -159,6 +212,31 @@ impl Instrument {
             Instrument::TrapKit => "Trap Kit",
             Instrument::ReggaetonKit => "Reggaeton Kit",
             Instrument::LatinPerc => "Latin Percussion",
+            Instrument::UprightPiano => "Upright Piano",
+            Instrument::BrightPiano => "Bright Piano",
+            Instrument::HonkyTonk => "Honky-tonk Piano",
+            Instrument::FeltPiano => "Felt Piano",
+            Instrument::ToyPiano => "Toy Piano",
+            Instrument::Rhodes => "Rhodes Piano",
+            Instrument::Wurlitzer => "Wurlitzer",
+            Instrument::FmPiano => "FM Piano",
+            Instrument::RockOrgan => "Rock Organ",
+            Instrument::Accordion => "Accordion",
+            Instrument::PwmLead => "PWM Lead",
+            Instrument::SyncLead => "Sync Lead",
+            Instrument::ReeseBass => "Reese Bass",
+            Instrument::WobbleBass => "Wobble Bass",
+            Instrument::Banjo => "Banjo",
+            Instrument::Kalimba => "Kalimba",
+            Instrument::Koto => "Koto",
+            Instrument::GlassPad => "Glass Pad",
+            Instrument::AnalogPad => "Analog Pad",
+            Instrument::Glockenspiel => "Glockenspiel",
+            Instrument::Xylophone => "Xylophone",
+            Instrument::SteelDrum => "Steel Drum",
+            Instrument::Trumpet => "Trumpet",
+            Instrument::Saxophone => "Saxophone",
+            Instrument::Clarinet => "Clarinet",
         }
     }
 
@@ -197,6 +275,31 @@ impl Instrument {
             Instrument::TrapKit => "Hard trap drums, 808 boom on B3",
             Instrument::ReggaetonKit => "Dembow kick, gated snare, congas",
             Instrument::LatinPerc => "Congas, bongos, timbales, shakers",
+            Instrument::UprightPiano => "Round, woody, short decay",
+            Instrument::BrightPiano => "Studio piano, shiny highs",
+            Instrument::HonkyTonk => "Saloon piano, out of tune",
+            Instrument::FeltPiano => "Muted, soft and intimate",
+            Instrument::ToyPiano => "Tiny metal bars, glassy",
+            Instrument::Rhodes => "Warm electric piano, bark",
+            Instrument::Wurlitzer => "Reedy electric piano, growl",
+            Instrument::FmPiano => "DX-style digital piano",
+            Instrument::RockOrgan => "Percussive, driven drawbars",
+            Instrument::Accordion => "Reeds with bellows swell",
+            Instrument::PwmLead => "Pulse lead, moving width",
+            Instrument::SyncLead => "Hard-sync, searing sweep",
+            Instrument::ReeseBass => "Detuned saws, rolling growl",
+            Instrument::WobbleBass => "Filter wobble, dubstep style",
+            Instrument::Banjo => "Bright, nasal pluck",
+            Instrument::Kalimba => "Thumb piano, soft plink",
+            Instrument::Koto => "Plucked silk strings",
+            Instrument::GlassPad => "Airy, shimmering glass",
+            Instrument::AnalogPad => "Wide saws, slow filter",
+            Instrument::Glockenspiel => "Bright, tiny steel bars",
+            Instrument::Xylophone => "Dry, woody, very short",
+            Instrument::SteelDrum => "Tuned pan, island shimmer",
+            Instrument::Trumpet => "Bright, brassy, with vibrato",
+            Instrument::Saxophone => "Breathy reed, vibrato",
+            Instrument::Clarinet => "Hollow, woody, odd harmonics",
         }
     }
 
@@ -205,27 +308,56 @@ impl Instrument {
             Instrument::Piano
             | Instrument::ElectricPiano
             | Instrument::Clavinet
-            | Instrument::Harpsichord => Category::Keys,
-            Instrument::Organ | Instrument::ChurchOrgan => Category::Organs,
-            Instrument::SynthLead | Instrument::SquareLead | Instrument::SuperSaw => {
-                Category::Leads
-            }
+            | Instrument::Harpsichord
+            | Instrument::UprightPiano
+            | Instrument::BrightPiano
+            | Instrument::HonkyTonk
+            | Instrument::FeltPiano
+            | Instrument::ToyPiano
+            | Instrument::Rhodes
+            | Instrument::Wurlitzer
+            | Instrument::FmPiano => Category::Keys,
+            Instrument::Organ
+            | Instrument::ChurchOrgan
+            | Instrument::RockOrgan
+            | Instrument::Accordion => Category::Organs,
+            Instrument::SynthLead
+            | Instrument::SquareLead
+            | Instrument::SuperSaw
+            | Instrument::PwmLead
+            | Instrument::SyncLead => Category::Leads,
             Instrument::SynthBass
             | Instrument::SubBass
             | Instrument::AcidBass
             | Instrument::Bass808
-            | Instrument::ElectricBass => Category::Basses,
+            | Instrument::ElectricBass
+            | Instrument::ReeseBass
+            | Instrument::WobbleBass => Category::Basses,
             Instrument::Pluck
             | Instrument::Guitar
             | Instrument::Harp
             | Instrument::ElectricGuitar
-            | Instrument::SynthPluck => Category::Plucked,
-            Instrument::Strings | Instrument::WarmPad | Instrument::Choir => Category::Pads,
+            | Instrument::SynthPluck
+            | Instrument::Banjo
+            | Instrument::Kalimba
+            | Instrument::Koto => Category::Plucked,
+            Instrument::Strings
+            | Instrument::WarmPad
+            | Instrument::Choir
+            | Instrument::GlassPad
+            | Instrument::AnalogPad => Category::Pads,
             Instrument::Bell
             | Instrument::Marimba
             | Instrument::MusicBox
-            | Instrument::Vibraphone => Category::Mallets,
-            Instrument::Brass | Instrument::Flute => Category::Brass,
+            | Instrument::Vibraphone
+            | Instrument::Glockenspiel
+            | Instrument::Xylophone
+            | Instrument::SteelDrum => Category::Mallets,
+            Instrument::Brass
+            | Instrument::Flute
+            | Instrument::Trumpet
+            | Instrument::Saxophone
+            | Instrument::Clarinet => Category::Brass,
             Instrument::DrumKit
             | Instrument::Kit808
             | Instrument::TrapKit
@@ -270,6 +402,32 @@ impl Instrument {
             Instrument::ElectricBass => 22.0,
             Instrument::ElectricGuitar => 14.0,
             Instrument::SynthPluck => 20.0,
+            // --- 0.13 ---
+            Instrument::UprightPiano => 16.0,
+            Instrument::BrightPiano => 12.0,
+            Instrument::HonkyTonk => 15.0,
+            Instrument::FeltPiano => 9.0,
+            Instrument::ToyPiano => 14.0,
+            Instrument::Rhodes => 10.0,
+            Instrument::Wurlitzer => 12.0,
+            Instrument::FmPiano => 11.0,
+            Instrument::RockOrgan => 40.0,
+            Instrument::Accordion => 14.0,
+            Instrument::PwmLead => 14.0,
+            Instrument::SyncLead => 14.0,
+            Instrument::ReeseBass => 20.0,
+            Instrument::WobbleBass => 22.0,
+            Instrument::Banjo => 16.0,
+            Instrument::Kalimba => 10.0,
+            Instrument::Koto => 12.0,
+            Instrument::GlassPad => 2.5,
+            Instrument::AnalogPad => 3.0,
+            Instrument::Glockenspiel => 8.0,
+            Instrument::Xylophone => 14.0,
+            Instrument::SteelDrum => 7.0,
+            Instrument::Trumpet => 14.0,
+            Instrument::Saxophone => 14.0,
+            Instrument::Clarinet => 16.0,
         }
     }
 }
@@ -686,6 +844,42 @@ impl Voice {
                 &mut self.ph,
                 &mut self.lp,
                 &mut self.lp2,
+            ),
+
+            // ------------------------------------------------ More voices (0.13, see more_voices.rs)
+            Instrument::UprightPiano
+            | Instrument::BrightPiano
+            | Instrument::HonkyTonk
+            | Instrument::FeltPiano
+            | Instrument::ToyPiano
+            | Instrument::Rhodes
+            | Instrument::Wurlitzer
+            | Instrument::FmPiano
+            | Instrument::RockOrgan
+            | Instrument::Accordion
+            | Instrument::PwmLead
+            | Instrument::SyncLead
+            | Instrument::ReeseBass
+            | Instrument::WobbleBass
+            | Instrument::Banjo
+            | Instrument::Kalimba
+            | Instrument::Koto
+            | Instrument::GlassPad
+            | Instrument::AnalogPad
+            | Instrument::Glockenspiel
+            | Instrument::Xylophone
+            | Instrument::SteelDrum
+            | Instrument::Trumpet
+            | Instrument::Saxophone
+            | Instrument::Clarinet => crate::more_voices::voice(
+                self.inst,
+                f,
+                t,
+                dt,
+                &mut self.ph,
+                &mut self.lp,
+                &mut self.lp2,
+                &mut self.rng,
             ),
         };
         let mut g = (t / attack).min(1.0) * self.vel * level;

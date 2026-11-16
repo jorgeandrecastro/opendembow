@@ -1,4 +1,4 @@
-//! Extra melodic voices (0.6): 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck.
+//! Extra synthesized melodic voices: 808 Bass, Fingered Bass, Electric Guitar, Synth Pluck.
 //!
 //! Same contract as the voices inside `instruments.rs`: returns `(sample, attack_s, level)`;
 //! the caller applies velocity, attack and the release envelope.

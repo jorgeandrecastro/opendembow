@@ -35,15 +35,50 @@ Dependencies in `Cargo.toml`:
 ```toml
 eframe = "0.37"
 cpal = "0.18"
-hound = "3.5"
 rfd = "0.18"
 serde_json = "1.0.154"
 midir = "0.11"
+opendembow-core = { version = "0.13.0", path = "crates/opendembow-core" }
 ```
+
+## Crates and modularity
+
+The repository is a Cargo workspace with two packages:
+
+- **`opendembow-core`** (`crates/opendembow-core`): reusable audio engine,
+  synthesized instruments and drums, effects, project model and persistence,
+  WAV I/O, and MIDI export. Its modules are public and the crate can be used
+  independently from the desktop interface.
+- **`opendembow`** (repository root): the desktop application and user
+  interface, which depends on `opendembow-core`.
+
+To use the core from another Rust project, add `opendembow-core = "0.13"` to
+`Cargo.toml`. The crate README describes its main entry points. To publish the
+library package to crates.io, run `cargo publish -p opendembow-core` from the
+workspace root.
+
+### Develop, test, and build the core crate
+
+Run these commands from the workspace root:
+
+```bash
+# Fast compile check while developing
+cargo check -p opendembow-core
+
+# Run the crate's tests
+cargo test -p opendembow-core
+
+# Build an optimized library
+cargo build -p opendembow-core --release
+```
+
+To check or test the entire workspace instead, use `cargo check --workspace`
+or `cargo test --workspace`.
 
 ## What's new in 0.13
 
 - **Drum-focused piano roll:** Drum tracks now use a dedicated pad grid instead of piano keys, with named rows for each drum sound and a clearer visual layout for programming beats.
+- **25 new synthesized instruments:** Upright, Bright, Honky-tonk, Felt and Toy Pianos, Rhodes, Wurlitzer and FM Piano; Rock Organ and Accordion; PWM and Sync Leads; Reese and Wobble Basses; Banjo, Kalimba and Koto; Glass and Analog Pads; Glockenspiel, Xylophone and Steel Drum; Trumpet, Saxophone and Clarinet. These bring the built-in instrument total to 58, with no samples required.
 
 ## What's new in 0.12
 
@@ -55,44 +90,10 @@ midir = "0.11"
 - **Release workflow:** Improved automated release builds and artifact generation for all supported platforms.
 
 
-## What's new in 0.11
-
-**Visual equalizer**
-
-- Three draggable points control the low, mid and high bands directly on the equalizer's response curve, calculated from the filters themselves; each point adjusts frequency and gain.
-- The Master spectrum is shown behind the curve (a per-track spectrum is not available).
-- Use the mouse wheel on the Mid point to adjust its Q (width); double-click a point to reset it.
-- Touching a point enables the EQ, and a label shows its frequency, gain and Q.
-- Existing controls remain available, with a new **Mid Q** control. The new `eq.low_freq`, `eq.mid_q` and `eq.high_freq` settings default to the existing sound, preserving older projects' sound.
-
-**Compressor transfer curve and gain-reduction meter**
-
-- The transfer curve plots input and output in dB, with a dotted 1:1 line and a shaded gain-reduction area.
-- Drag the knee to adjust the threshold and the right endpoint to adjust the ratio; a live point follows the track level.
-- A 0-24 dB gain-reduction meter accompanies the curve.
-
-## What's new in 0.10
-
-**Rock-solid loops: the loop now runs inside the audio engine**
-
-- **Fixed: the playhead could escape the loop** after a few repetitions. The old loop was checked once per interface frame, so a late frame (spectrum drawing, a slow window) could miss the moment the playhead crossed the loop end, and the playhead then carried on past it.
-- The loop is now handled **in the audio callback, sample by sample**: when the playhead reaches the loop end inside an audio buffer, the engine renders up to that exact sample, jumps back to the loop start and keeps rendering. It cannot miss a pass, and there is **no drift and no accumulated error**, whatever the frame rate of the interface.
-- As long as the loop is on, the playhead never leaves it. Turn the loop off and playback simply continues.
-- Notes still ringing when the loop wraps are released, so tails do not pile up from one pass to the next.
-- A playhead placed after the loop end plays on normally.
-- A tempo change is taken into account immediately.
-- The loop interface itself is unchanged: same loop bar, same shortcuts.
-
-**Saved with the project**
-
-- The **loop range** (start, end, on / off) is now saved in the `.dembow` file and restored when you open it.
-- **Volume automation is saved too**: before this fix the automation points were lost every time a project was saved.
-- Older projects still open (they simply have no loop and no automation).
-- The version number in the transport bar now really follows `Cargo.toml`.
-
 ## Features
 
-- **33 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, Drums & Percussion.
+- **58 built-in synthesized instruments** in 9 categories: Keys, Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, Brass & Winds, Drums & Percussion.
+- **25 additional synthesized voices in 0.13**: eight piano variants and new sounds across Organs, Leads, Basses, Plucked, Pads & Strings, Mallets & Bells, and Brass & Winds.
 - **Sample-accurate loops** (0.10): the loop runs inside the audio engine, so the playhead never leaves it while the loop is on.
 - **Master spectrum analyzer and dBFS meters** (0.9): see the whole mix in real time.
 - **Hideable panels and Focus mode** (0.9): instruments, piano roll & mixer and keyboard can be hidden; View menu, panel icons and shortcuts.

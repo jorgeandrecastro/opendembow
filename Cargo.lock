@@ -2568,10 +2568,18 @@ version = "0.13.0"
 dependencies = [
  "cpal",
  "eframe",
- "hound",
  "midir",
+ "opendembow-core",
  "rfd",
  "serde_json",
+]
+
+[[package]]
+name = "opendembow-core"
+version = "0.13.0"
+dependencies = [
+ "cpal",
+ "hound",
 ]
 
 [[package]]

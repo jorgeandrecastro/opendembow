@@ -1,4 +1,4 @@
-//! Urban drum kits (0.6): "Trap Kit" and "Reggaeton Kit".
+//! Urban drum kits: "Trap Kit" and "Reggaeton Kit".
 //!
 //! Same note map as `drums.rs` (notes are folded into 36..=59), so a pattern keeps working when you
 //! swap kits. Kick, rim, snares, clap, toms and hats are redesigned here; crashes, rides, cowbell and

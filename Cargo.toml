@@ -6,13 +6,17 @@ description = "OpenDembow - a modern, elegant digital audio workstation written 
 license = "GPL-3.0-or-later"
 authors = ["Jorge Andre Castro <georgeandrec@gmail.com>"]
 
+[workspace]
+members = ["crates/opendembow-core"]
+resolver = "3"
+
 [dependencies]
 eframe = "0.37"
 cpal = "0.18"
-hound = "3.5"
 rfd = "0.18"
 serde_json = "1.0.154"
 midir = "0.11"
+opendembow-core = { version = "0.13.0", path = "crates/opendembow-core" }
 
 [profile.release]
 opt-level = 3

@@ -1,4 +1,4 @@
-//! Synthesized drum kits, no samples: "Drum Kit" (acoustic style) and "808 Kit" (electronic).
+//! Synthesized drum kits for the reusable audio library, with no samples.
 //!
 //! Every note is folded into 36..=59 (two octaves), so the whole keyboard plays drums:
 //! 36 kick, 37 rim, 38/40 snare, 39 clap, 41/43/45/47/48/50 toms, 42/44 closed hat,
